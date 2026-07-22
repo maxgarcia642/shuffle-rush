@@ -2019,6 +2019,9 @@ export default class GameScene extends Phaser.Scene {
       if (this.currentTrack && this.currentTrack.isPlaying) {
           this.currentTrack.pause();
       }
+      // Block 9: freeze video layers with the rest of the world
+      this.videoBg?.pause();
+      this.videoGuest?.pause();
       
       // Stop Warning Alarm if playing
       if (this.warningAlarm && this.warningAlarm.isPlaying) {
@@ -2049,6 +2052,11 @@ export default class GameScene extends Phaser.Scene {
       this.tweens.resumeAll();
       if (this.currentTrack && this.currentTrack.isPaused) {
           this.currentTrack.resume();
+          // Block 9: start() re-anchors the beat grid arbitrarily — re-align
+          // it to the track's own grid so beats stay honest after resume.
+          const cached = this.detectedBPMs.get(this.currentTrackKey);
+          const gridOffset = (cached && typeof cached === 'object') ? cached.offset : 0;
+          this.rhythmSystem.syncToPhaserSound(this.currentTrack, gridOffset);
       }
       
       // Resume Warning Alarm if it was active
@@ -2057,6 +2065,8 @@ export default class GameScene extends Phaser.Scene {
           this.lowHealthOverlay.setVisible(true);
           this.lowHealthText.setVisible(true);
       }
+      this.videoBg?.resume();
+      this.videoGuest?.resume();
       
       // Hide pause menu
       this.hidePauseMenu();

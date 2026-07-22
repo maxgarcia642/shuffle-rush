@@ -5,6 +5,7 @@ import { parseGIF, decompressFrames } from 'https://cdn.jsdelivr.net/npm/gifuct-
 import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
 import MediaLibrary from './MediaLibrary.js';
 import { search } from './SearchIndex.js';
+import { LIMITS } from './MediaPipeline.js';
 
 export default class ImageUploadScene extends Phaser.Scene {
   constructor() {
@@ -19,9 +20,11 @@ export default class ImageUploadScene extends Phaser.Scene {
     this.dropCooldownDuration = 500; // 500ms cooldown between drops
     this.isProcessingBatch = false; // Prevent overlapping batch uploads
     
-    // File size limits (1GB each file, no total batch limit to allow bulk uploads)
-    this.MAX_IMAGE_SIZE = 1024 * 1024 * 1024; // 1GB per image
-    this.MAX_AUDIO_SIZE = 1024 * 1024 * 1024; // 1GB per audio file
+    // Block 9: honest per-file caps from MediaPipeline (the old 1GB numbers
+    // were fiction — base64 in a browser dies long before that). GIFs get the
+    // gif cap; plain images the image cap; audio the audio cap.
+    this.MAX_IMAGE_SIZE = LIMITS.gif;   // 15MB — covers gif + image (gif is the larger)
+    this.MAX_AUDIO_SIZE = LIMITS.audio; // 40MB
     this.MAX_TOTAL_UPLOAD = Number.MAX_SAFE_INTEGER; // No batch limit - rely on per-file limit instead
     
     // Debounced gallery refresh to prevent excessive rebuilding during batch uploads
@@ -511,6 +514,7 @@ export default class ImageUploadScene extends Phaser.Scene {
   }
   
   validateFileSize(file, isAudio = false) {
+      if (!file || !file.size) return false; // Block 9: 0-byte files are junk
       const maxSize = isAudio ? this.MAX_AUDIO_SIZE : this.MAX_IMAGE_SIZE;
       return file.size <= maxSize;
   }

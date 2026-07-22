@@ -32,6 +32,11 @@ export default class ImageUploadScene extends Phaser.Scene {
     
     // Track if storage warning has been shown to avoid spam
     this.storageWarningShown = false;
+
+    // Block 9: Phaser 3 does NOT call a scene's shutdown() method by itself —
+    // it only emits the event. Without this hook every DOM overlay (upload
+    // inputs + search box) leaked on scene exit.
+    this.events.once('shutdown', () => this.shutdown());
     
     // Restore custom assets from localStorage
     this.restoreCustomAssets();
@@ -1059,7 +1064,9 @@ export default class ImageUploadScene extends Phaser.Scene {
     }
   }
 
-  // Override shutdown to clean up DOM elements
+  // DOM cleanup — invoked via the 'shutdown' event hook registered in create().
+  // NOTE: Phaser.Scene has no shutdown() to super-call; the old super.shutdown()
+  // would have thrown had this ever run.
   shutdown() {
       if (this.fileInputs) {
           this.fileInputs.forEach(item => {
@@ -1069,7 +1076,6 @@ export default class ImageUploadScene extends Phaser.Scene {
           });
           this.fileInputs = [];
       }
-      super.shutdown();
   }
 
   updateToggleButtonStates() {

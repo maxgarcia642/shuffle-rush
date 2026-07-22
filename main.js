@@ -215,4 +215,7 @@ for (const key of Object.keys(SETTINGS_DEFAULTS)) {
         await MediaLibrary.setKV('settings', bundle);
     });
 }
+// Dev/test convenience: lets the browser console (and automated checks)
+// inspect the registry and scenes. No gameplay code reads this.
+window.ShuffleRushGame = game;
 console.log('=== SHUFFLE RUSH v2 boot complete ===');

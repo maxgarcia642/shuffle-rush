@@ -246,6 +246,9 @@ export default class GameScene extends Phaser.Scene {
       this.videoBg?.destroy();
       this.videoGuest?.destroy();
       this._removePlaylistSearchInput();
+      // Block 9: the Conductor runs on setInterval, not the Phaser clock —
+      // without destroy() its scheduler keeps firing after the scene dies.
+      this.rhythmSystem?.destroy();
     });
     
     // Add radial gradient overlay

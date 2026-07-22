@@ -5,6 +5,7 @@ import { validateFile, classifyFile, LIMITS } from '../MediaPipeline.js';
 import PowerupManager from '../Powerups.js';
 import { search } from '../SearchIndex.js';
 import { scaleSfxVolume } from '../Sfx.js';
+import LeaderboardService, { insertScore, normalizeReplay, ReplayRecorder } from '../LeaderboardService.js';
 
 let pass = 0, fail = 0;
 function t(name, cond, detail = '') {
@@ -114,6 +115,42 @@ t('sfxVol 0 mutes', scaleSfxVolume(0.8, 0) === 0);
 t('sfxVol 1 doubles shipped mix', scaleSfxVolume(0.25, 1) === 0.5);
 t('missing sfxVol treated as default', scaleSfxVolume(0.6, undefined) === 0.6);
 t('missing base volume treated as 1', Math.abs(scaleSfxVolume(undefined, 0.5) - 1) < 1e-9);
+
+console.log('── LeaderboardService (Block 7: pure logic + local guard) ──');
+{
+  const l1 = insertScore([], { name: 'A', score: 100, at: 1 });
+  t('insert into empty', l1.length === 1 && l1[0].score === 100);
+  const l2 = insertScore(l1, { name: 'B', score: 300, at: 2 });
+  t('higher score sorts first', l2[0].name === 'B');
+  let big = [];
+  for (let i = 0; i < 15; i++) big = insertScore(big, { name: 'P' + i, score: i * 10, at: i });
+  t('caps at 10 entries', big.length === 10);
+  t('keeps the highest 10', big[9].score === 50 && big[0].score === 140);
+  t('rejects junk entries', insertScore([], { name: 'X', score: 'nope' }).length === 0);
+  
+  t('normalizeReplay drops malformed events', normalizeReplay([[100, 1, 'perfect'], 'junk', [null, 0, 'x'], [200.6, 2, 'miss']]).length === 2);
+  t('normalizeReplay rounds times', normalizeReplay([[200.6, 2, 'miss']])[0][0] === 201);
+  
+  let fakeNow = 5000;
+  const rec = new ReplayRecorder(() => fakeNow);
+  rec.start();
+  fakeNow = 5450; rec.record(1, 'perfect');
+  fakeNow = 5900; rec.record(2, 'miss');
+  const replay = rec.finish();
+  t('recorder produces relative timestamps', replay.events[0][0] === 450 && replay.events[1][0] === 900);
+  t('recorder captures lane + judgment', replay.events[0][1] === 1 && replay.events[1][2] === 'miss');
+  
+  // Guard: no config file exists in this checkout → configure() must resolve
+  // false (local mode) and never throw. This proves the itch.io/no-creds path.
+  const remote = await LeaderboardService.configure();
+  t('configure() without config → local mode, no throw', remote === false && LeaderboardService.isRemote() === false);
+  // Local storage stub so submit/top10 run under Node
+  const mem = {};
+  LeaderboardService._storage = { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } };
+  await LeaderboardService.submitScore({ name: 'NODE', score: 777, enemies: 3 });
+  const top = await LeaderboardService.top10();
+  t('local submit + top10 roundtrip', top.length === 1 && top[0].score === 777 && top[0].name === 'NODE');
+}
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

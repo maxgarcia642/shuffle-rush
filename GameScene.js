@@ -10,6 +10,7 @@ import PowerupManager from './Powerups.js';
 import MediaLibrary from './MediaLibrary.js';
 import VideoActor from './VideoActor.js';
 import { search } from './SearchIndex.js';
+import LeaderboardService, { ReplayRecorder } from './LeaderboardService.js';
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
@@ -514,6 +515,12 @@ export default class GameScene extends Phaser.Scene {
     this.rhythmSystem.start();
     this.rhythmSystem.on('beat', () => this.onBeat());
     
+    // Block 7: leaderboard (local always; InstantDB only if configured) and
+    // the per-run input-replay recorder that powers future ghost battles.
+    LeaderboardService.configure(); // async, guarded — no-ops without config
+    this.replayRecorder = new ReplayRecorder(() => this.rhythmSystem.nowMs());
+    this.replayRecorder.start();
+    
     // Music Playlist System - Setup and start music AFTER rhythm system is initialized
     this.setupMusicPlaylist();
     
@@ -770,6 +777,10 @@ export default class GameScene extends Phaser.Scene {
       points = Math.round(points * (this.powerups ? this.powerups.scoreMult() : 1));
       this.score += points;
       
+      // Block 7: feed the ghost-replay recorder (judgment on the audio clock)
+      const hitLaneIdx = this.laneConfig.findIndex(l => l.x === closestMarker.laneX);
+      this.replayRecorder?.record(hitLaneIdx, feedback === 'PERFECT!' ? 'perfect' : feedback === 'GOOD!' ? 'good' : 'ok');
+      
       // Check for new high score during gameplay
       const currentHighScore = parseInt(localStorage.getItem('shuffleRushHighScore') || '0');
       const wasHighScore = currentHighScore > 0;
@@ -844,6 +855,8 @@ export default class GameScene extends Phaser.Scene {
       // Missed the beat (or wrong key)
       if (!keepCombo) { this.combo = 0; } else { this.showFeedback('COMBO KEPT!', 0xb967ff); }
       this.totalMisses++;
+      // Block 7: ghost-replay feed
+      this.replayRecorder?.record(this.laneConfig.findIndex(l => l.x === markerData.laneX), 'miss');
       this.updateComboVisuals();
       this.showFeedback('MISS', 0xff0000);
       
@@ -2835,6 +2848,16 @@ export default class GameScene extends Phaser.Scene {
       
       const currentTotalEnemies = parseInt(localStorage.getItem('shuffleRushTotalEnemies') || '0');
       localStorage.setItem('shuffleRushTotalEnemies', (currentTotalEnemies + this.enemiesDefeated).toString());
+      
+      // Block 7: submit the run to the leaderboard (local list always; remote
+      // only when InstantDB is configured) with the ghost replay attached.
+      if (this.replayRecorder && this.score > 0) {
+          const replay = this.replayRecorder.finish();
+          LeaderboardService.submitScore({
+              name: 'PLAYER', score: this.score, enemies: this.enemiesDefeated, replay
+          }).catch(e => console.warn('leaderboard submit failed:', e));
+          this.replayRecorder = null;
+      }
       
       const { width, height } = this.scale;
       

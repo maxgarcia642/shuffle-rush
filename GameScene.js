@@ -3,6 +3,11 @@ import RhythmSystem from './RhythmSystem.js';
 import Player from './Player.js';
 import Enemy from './Enemy.js';
 import BeatDetector from './BeatDetector.js';
+import ThemeManager from './ThemeManager.js';
+import Juice from './Juice.js';
+import PowerupManager from './Powerups.js';
+import MediaLibrary from './MediaLibrary.js';
+import VideoActor from './VideoActor.js';
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
@@ -99,62 +104,62 @@ export default class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('gradient-bg', 'https://rosebud.ai/assets/gradientBackground.png?wb04');
-    this.load.image('dancer-1', 'https://rosebud.ai/assets/ipod_1.png?Ev5j');
-    this.load.image('dancer-3', 'https://rosebud.ai/assets/3416ffd35c26a1752542c0bc288ff84f.png?Eg0q');
+    this.load.image('gradient-bg', 'assets/gradientbackground.png');
+    this.load.image('dancer-1', 'assets/ipod_1.png');
+    this.load.image('dancer-3', 'assets/3416ffd35c26a1752542c0bc288ff84f.png');
     // dancer-5 removed
     // dancer-6 removed
     // dancer-7 removed
-    this.load.image('dancer-8', 'https://rosebud.ai/assets/48e6419460e1089bfbbf469f66d5b857.png?6LnL');
-    this.load.image('dancer-9', 'https://rosebud.ai/assets/openart-image_5h9r7RHC_1766769844463_raw.png?mBoh');
-    this.load.image('dancer-11', 'https://rosebud.ai/assets/openart-image_Cj7r3IF8_1766772364490_raw.png?0YIj');
-    this.load.image('dancer-12', 'https://rosebud.ai/assets/openart-image_eC_NokeU_1766772858600_raw.png?1B6r');
-    this.load.image('dancer-13', 'https://rosebud.ai/assets/openart-image_bOVZ_q4e_1766769708364_raw.png?JTXh');
-    this.load.image('dancer-14', 'https://rosebud.ai/assets/openart-image_ej6hcmYK_1766773004301_raw.png?XBXq');
+    this.load.image('dancer-8', 'assets/48e6419460e1089bfbbf469f66d5b857.png');
+    this.load.image('dancer-9', 'assets/openart-image_5h9r7rhc_1766769844463_raw.png');
+    this.load.image('dancer-11', 'assets/openart-image_cj7r3if8_1766772364490_raw.png');
+    this.load.image('dancer-12', 'assets/openart-image_ec_nokeu_1766772858600_raw.png');
+    this.load.image('dancer-13', 'assets/openart-image_bovz_q4e_1766769708364_raw.png');
+    this.load.image('dancer-14', 'assets/openart-image_ej6hcmyk_1766773004301_raw.png');
     // dancer-15 removed
-    this.load.image('dancer-16', 'https://rosebud.ai/assets/openart-image_L0o4fC_g_1766769308945_raw.png?qTri');
-    this.load.image('dancer-17', 'https://rosebud.ai/assets/openart-image_fN9NwtaK_1766769352930_raw.png?YwNB');
-    this.load.image('dancer-18', 'https://rosebud.ai/assets/openart-image_NhN1g02R_1766769862487_raw.png?uDSp');
-    this.load.image('dancer-19', 'https://rosebud.ai/assets/openart-image_NAjwcTbH_1766769722191_raw.png?wrmV');
-    this.load.image('dancer-20', 'https://rosebud.ai/assets/openart-image_N16K-OfJ_1766769295833_raw.png?sGUk');
+    this.load.image('dancer-16', 'assets/openart-image_l0o4fc_g_1766769308945_raw.png');
+    this.load.image('dancer-17', 'assets/openart-image_fn9nwtak_1766769352930_raw.png');
+    this.load.image('dancer-18', 'assets/openart-image_nhn1g02r_1766769862487_raw.png');
+    this.load.image('dancer-19', 'assets/openart-image_najwctbh_1766769722191_raw.png');
+    this.load.image('dancer-20', 'assets/openart-image_n16k-ofj_1766769295833_raw.png');
     // dancer-21 removed
-    this.load.image('dancer-22', 'https://rosebud.ai/assets/openart-image_oa5yTAi5_1766772352539_raw.png?IYcu');
+    this.load.image('dancer-22', 'assets/openart-image_oa5ytai5_1766772352539_raw.png');
     // dancer-23 removed
     // dancer-24 removed
-    this.load.image('dancer-25', 'https://rosebud.ai/assets/openart-image_VrPRs7pd_1766769720970_raw.png?W5Ur');
+    this.load.image('dancer-25', 'assets/openart-image_vrprs7pd_1766769720970_raw.png');
     // dancer-26 removed
     // dancer-27 removed
-    this.load.image('dancer-29', 'https://rosebud.ai/assets/openart-image_1_AKYK0s_1766769096571_raw.png?Sunk');
-    this.load.image('dancer-30', 'https://rosebud.ai/assets/e868c390b62d4df3bb1bdd17395fe41e.png?H2PC');
-    this.load.image('dancer-32', 'https://rosebud.ai/assets/metro girl.png?t5OE');
-    this.load.image('dancer-33', 'https://rosebud.ai/assets/openart-image_k-Mxai4w_1766769199781_raw.png?7hrz');
-    this.load.image('dancer-34', 'https://rosebud.ai/assets/openart-image_S1Am0XLb_1766769052493_raw.png?wSCB');
-    this.load.image('dancer-35', 'https://rosebud.ai/assets/openart-image_vRQgO9cG_1766768971563_raw.png?O3Mx');
-    this.load.image('dancer-36', 'https://rosebud.ai/assets/openart-image_zAZyPC3U_1766768967253_raw.png?AFXg');
-    this.load.image('dancer-37', 'https://rosebud.ai/assets/1ef1da67fdd7c4342f74ffd5dcee1c4c (1).png?iT5f');
-    this.load.image('dancer-38', 'https://rosebud.ai/assets/openart-image_C28fK6GG_1766802182766_raw.png?uOiT');
-    this.load.image('dancer-39', 'https://rosebud.ai/assets/openart-image_L2S8R2Yu_1766801528984_raw.png?B8K5');
-    this.load.image('dancer-40', 'https://rosebud.ai/assets/openart-image_qM4ezQai_1766803187306_raw.png?B71T');
-    this.load.image('attack-burst', 'https://rosebud.ai/assets/hitEffectBurst.png?FQqz');
-    this.load.image('beat-circle', 'https://rosebud.ai/assets/beatCircleUI.png?MECs');
+    this.load.image('dancer-29', 'assets/openart-image_1_akyk0s_1766769096571_raw.png');
+    this.load.image('dancer-30', 'assets/e868c390b62d4df3bb1bdd17395fe41e.png');
+    this.load.image('dancer-32', 'assets/metro-girl.png');
+    this.load.image('dancer-33', 'assets/openart-image_k-mxai4w_1766769199781_raw.png');
+    this.load.image('dancer-34', 'assets/openart-image_s1am0xlb_1766769052493_raw.png');
+    this.load.image('dancer-35', 'assets/openart-image_vrqgo9cg_1766768971563_raw.png');
+    this.load.image('dancer-36', 'assets/openart-image_zazypc3u_1766768967253_raw.png');
+    this.load.image('dancer-37', 'assets/1ef1da67fdd7c4342f74ffd5dcee1c4c-1.png');
+    this.load.image('dancer-38', 'assets/openart-image_c28fk6gg_1766802182766_raw.png');
+    this.load.image('dancer-39', 'assets/openart-image_l2s8r2yu_1766801528984_raw.png');
+    this.load.image('dancer-40', 'assets/openart-image_qm4ezqai_1766803187306_raw.png');
+    this.load.image('attack-burst', 'assets/hiteffectburst.png');
+    this.load.image('beat-circle', 'assets/beatcircleui.png');
     
     // Load Gameplay Music - All URLs properly encoded
-    this.load.audio('rave-planet', encodeURI('https://rosebud.ai/assets/Rave Planet by Matrika.mp3?cAI4'));
-    this.load.audio('guns-n-drive', encodeURI('https://rosebud.ai/assets/Guns and Drive by INPLUSMUSIC.mp3?7avh'));
-    this.load.audio('supercell', encodeURI('https://rosebud.ai/assets/Supercell by Tatami.mp3?E4JF'));
-    this.load.audio('dont-stop-me', encodeURI("https://rosebud.ai/assets/Don't Stop Me by Tatami.mp3?SQyt"));
-    this.load.audio('find-home', encodeURI('https://rosebud.ai/assets/Find Home by Arenas.mp3?jhA0'));
-    this.load.audio('fast-light', encodeURI('https://rosebud.ai/assets/Fast and Light Technology by Audio Tape.mp3?Ob1X'));
+    this.load.audio('rave-planet', encodeURI('assets/rave-planet-by-matrika.mp3'));
+    this.load.audio('guns-n-drive', encodeURI('assets/guns-and-drive-by-inplusmusic.mp3'));
+    this.load.audio('supercell', encodeURI('assets/supercell-by-tatami.mp3'));
+    this.load.audio('dont-stop-me', encodeURI("assets/dont-stop-me-by-tatami.mp3"));
+    this.load.audio('find-home', encodeURI('assets/find-home-by-arenas.mp3'));
+    this.load.audio('fast-light', encodeURI('assets/fast-and-light-technology-by-audio-tape.mp3'));
     // back-2-back is only for menu, not loaded in GameScene
-    this.load.audio('menu-click', encodeURI('https://rosebud.ai/assets/Menu Click by Leszek_Szary of freesound_community.mp3?cDI3'));
-    this.load.audio('successful-hit', encodeURI('https://rosebud.ai/assets/Successful Hit (Video Game - Bonus) by Universfield.mp3?WIIP'));
-    this.load.audio('missed-hit', encodeURI('https://rosebud.ai/assets/Missed Hit (Babyscratch) by NobodyYouKnowOf (Freesound) of freesound_community.mp3?IrRO'));
-    this.load.audio('healing', encodeURI('https://rosebud.ai/assets/Healing (Magic (6)) by yodguard.mp3?kooR'));
-    this.load.audio('counterattack', encodeURI('https://rosebud.ai/assets/Counterattack (Game Over Arcade) by myfox14 (Freesound) of freesound_community.mp3?gwwn'));
-    this.load.audio('enemy-death', encodeURI('https://rosebud.ai/assets/Enemy Death (Sfx12 - Boss_Damage1) by Data_pion.mp3?xOI1'));
-    this.load.audio('player-death', encodeURI('https://rosebud.ai/assets/Player Death (Game Explosion) by SoundReality.mp3?8wfG'));
-    this.load.audio('game-over', encodeURI('https://rosebud.ai/assets/Game Over by Ivan_Luzan.mp3?DWU2'));
-    this.load.audio('severe-warning', encodeURI('https://rosebud.ai/assets/Severe Warning Alarm by freesound_community.mp3?NZxV'));
+    this.load.audio('menu-click', encodeURI('assets/menu-click-by-leszek_szary-of-freesound_community.mp3'));
+    this.load.audio('successful-hit', encodeURI('assets/successful-hit-video-game-bonus-by-universfield.mp3'));
+    this.load.audio('missed-hit', encodeURI('assets/missed-hit-babyscratch-by-nobodyyouknowof-freesound-of-freesound_community.mp3'));
+    this.load.audio('healing', encodeURI('assets/healing-magic-6-by-yodguard.mp3'));
+    this.load.audio('counterattack', encodeURI('assets/counterattack-game-over-arcade-by-myfox14-freesound-of-freesound_community.mp3'));
+    this.load.audio('enemy-death', encodeURI('assets/enemy-death-sfx12-boss_damage1-by-data_pion.mp3'));
+    this.load.audio('player-death', encodeURI('assets/player-death-game-explosion-by-soundreality.mp3'));
+    this.load.audio('game-over', encodeURI('assets/game-over-by-ivan_luzan.mp3'));
+    this.load.audio('severe-warning', encodeURI('assets/severe-warning-alarm-by-freesound_community.mp3'));
   }
   create() {
     const { width, height } = this.scale;
@@ -227,6 +232,20 @@ export default class GameScene extends Phaser.Scene {
     
     // Simple rhythm system - 120 BPM (Initialize BEFORE particle effects that use it)
     this.rhythmSystem = new RhythmSystem(this, 120);
+    // ── v2 systems: theme, juice, powerups, video layers ──
+    ThemeManager.init(this.registry);
+    this.juice = new Juice(this);
+    this.juice.startFloaters();
+    this.powerups = new PowerupManager(this, {
+      onApply: (id, def) => this.showFeedback(def.label + '!', def.color)
+    });
+    ThemeManager.applyToGameScene(this);
+    this._setupVideoLayers();
+    this.events.once('shutdown', () => {
+      this.juice?.destroy();
+      this.videoBg?.destroy();
+      this.videoGuest?.destroy();
+    });
     
     // Add radial gradient overlay
     this.createRadialGradient();
@@ -526,6 +545,7 @@ export default class GameScene extends Phaser.Scene {
     
     // Pulse Speaker Rings on Beat
     this.pulseSpeakerRings();
+    this.juice?.onBeat();
     
     // Scramble Geometric Chaos
     this.scrambleGeometricChaos();
@@ -611,11 +631,11 @@ export default class GameScene extends Phaser.Scene {
     // Mobile devices get faster falling circles for increased difficulty (1.4x speed)
     // Desktop uses standard speed (tapping is easier than typing)
     const speedMultiplier = this.isMobile ? 1.4 : 2.0;
-    const travelTime = this.rhythmSystem.beatInterval * speedMultiplier;
+    const travelTime = this.rhythmSystem.beatInterval * speedMultiplier * (this.powerups ? this.powerups.travelScale() : 1);
     
     const markerData = {
       sprite: markerContainer,
-      targetTime: this.time.now + travelTime,
+      targetTime: this.rhythmSystem.nowMs() + travelTime,
       requiredKey: selectedKey,
       laneX: lane.x,
       laneColor: lane.color,
@@ -670,9 +690,9 @@ export default class GameScene extends Phaser.Scene {
     // Filter markers that are within hit window AND match the key/lane
     const hittableMarkers = this.beatMarkers.filter(marker => {
         if (marker.hit) return false;
-        const diff = Math.abs(marker.targetTime - this.time.now);
+        const diff = Math.abs(marker.targetTime - this.rhythmSystem.nowMs());
         // Basic window 300ms
-        if (diff >= 300) return false;
+        if (diff >= 300 * (this.powerups ? this.powerups.windowScale() : 1)) return false;
         
         // If tap input with specific lane, only hit markers in that lane
         if (tappedLaneIdx !== null) {
@@ -690,7 +710,7 @@ export default class GameScene extends Phaser.Scene {
     });
     // Find the absolute closest among the valid candidates
     hittableMarkers.forEach(marker => {
-        const diff = Math.abs(marker.targetTime - this.time.now);
+        const diff = Math.abs(marker.targetTime - this.rhythmSystem.nowMs());
         if (diff < closestDiff) {
             closestDiff = diff;
             closestMarker = marker;
@@ -707,15 +727,17 @@ export default class GameScene extends Phaser.Scene {
       let feedback = 'HIT!';
       let points = 100;
       let damage = 20;
-      if (closestDiff < 100) {
+      const wScale = this.powerups ? this.powerups.windowScale() : 1;
+      if (closestDiff < 100 * wScale) {
         feedback = 'PERFECT!';
         points = 200;
         damage = 30;
-      } else if (closestDiff < 200) {
+      } else if (closestDiff < 200 * wScale) {
         feedback = 'GOOD!';
         points = 150;
         damage = 25;
       }
+      points = Math.round(points * (this.powerups ? this.powerups.scoreMult() : 1));
       this.score += points;
       
       // Check for new high score during gameplay
@@ -767,18 +789,30 @@ export default class GameScene extends Phaser.Scene {
       
       // Visual Impact - Use the lane position of the hit marker
       this.createShockwave(closestMarker.laneX, height * 0.85, closestMarker.laneColor);
+      this.juice?.burst(closestMarker.laneX, height * 0.85, closestMarker.laneColor);
+      if (feedback === 'PERFECT!') this.juice?.hitstop(60, 0.3);
       
       this.player.attack();
       this.enemy.takeDamage(damage);
       // Check if enemy defeated - spawn new one for endless mode
       if (this.enemy.health <= 0) {
+        if (this.enemy.sprite) this.powerups?.onEnemyDefeated(this.enemy.sprite.x, this.enemy.sprite.y);
         this.spawnNewEnemy();
       }
     }
   }
   handleMiss(markerData) {
+      // v2: powerup interception before any penalty
+      if (this.powerups && this.powerups.consumeShield()) {
+          this.showFeedback('SHIELDED!', 0x05ffa1);
+          if (markerData.sprite) markerData.sprite.destroy();
+          const si = this.beatMarkers.indexOf(markerData);
+          if (si > -1) this.beatMarkers.splice(si, 1);
+          return;
+      }
+      const keepCombo = this.powerups ? this.powerups.consumeComboKeeper() : false;
       // Missed the beat (or wrong key)
-      this.combo = 0;
+      if (!keepCombo) { this.combo = 0; } else { this.showFeedback('COMBO KEPT!', 0xb967ff); }
       this.totalMisses++;
       this.updateComboVisuals();
       this.showFeedback('MISS', 0xff0000);
@@ -1091,6 +1125,42 @@ export default class GameScene extends Phaser.Scene {
     }
   }
   
+  async _setupVideoLayers() {
+    const vids = this.registry.get('customVideos') || [];
+    if (!vids.length) return;
+    const latest = vids[vids.length - 1];
+    const { width, height } = this.scale;
+    try {
+      if (this.registry.get('videoBgEnabled')) {
+        const blob = await MediaLibrary.getBlob('video:' + latest.key);
+        if (blob) {
+          this.videoBg = new VideoActor(this, blob, {
+            key: 'vbg-' + latest.key, sound: !!this.registry.get('videoBgSound'), maxDim: 1024, fps: 24
+          });
+          this.videoBg.onReady = () => {
+            const img = this.add.image(width / 2, height / 2, this.videoBg.key).setDepth(-5).setAlpha(0.35);
+            img.setScale(Math.max(width / img.width, height / img.height));
+            this.videoBgImage = img;
+          };
+        }
+      }
+      if (this.registry.get('videoOpponentEnabled')) {
+        const blob = await MediaLibrary.getBlob('video:' + latest.key);
+        if (blob) {
+          this.videoGuest = new VideoActor(this, blob, { key: 'vguest-' + latest.key, sound: false, maxDim: 360, fps: 24 });
+          this.videoGuest.onReady = () => {
+            const gx = width * 0.78, gy = height * 0.30;
+            this.videoGuestFrame = this.add.rectangle(gx, gy, 236, 156, 0x000000, 0.55)
+              .setStrokeStyle(3, ThemeManager.current.beam).setDepth(6);
+            const img = this.add.image(gx, gy, this.videoGuest.key).setDepth(7);
+            img.setScale(Math.min(228 / img.width, 148 / img.height));
+            this.videoGuestImage = img;
+          };
+        }
+      }
+    } catch (e) { console.warn('video layers unavailable:', e); }
+  }
+
   createHalftoneGrid() {
     const { width, height } = this.scale;
     const spacing = 40;
@@ -1897,7 +1967,7 @@ export default class GameScene extends Phaser.Scene {
     // Check if audio exists in cache before playing
     if (this.cache.audio.exists(track.key)) {
         console.log('✓ Audio file FOUND in cache, playing now...');
-        this.currentTrack = this.sound.add(track.key, { volume: 0.4 });
+        this.currentTrack = this.sound.add(track.key, { volume: this.registry.get('musicVol') ?? 0.4 });
         
         // AUTO BPM DETECTION
         if (this.detectedBPMs.has(track.key)) {
@@ -1914,9 +1984,11 @@ export default class GameScene extends Phaser.Scene {
                 
                 // Use a slight delay to allow the UI to update if needed
                 this.time.delayedCall(100, async () => {
-                    const detectedBPM = await BeatDetector.detectBPM(audioBuffer);
-                    this.detectedBPMs.set(track.key, detectedBPM);
-                    this.updateSystemBPM(detectedBPM);
+                    const grid = await BeatDetector.detectBeatGrid(audioBuffer);
+                    this.detectedBPMs.set(track.key, grid.bpm);
+                    this.updateSystemBPM(grid.bpm);
+                    // Align the beat grid to the track's own first-beat offset
+                    this.rhythmSystem.syncToPhaserSound(this.currentTrack, grid.offset);
                 });
             }
         }

@@ -119,44 +119,44 @@ export default class MenuScene extends Phaser.Scene {
   
   preload() {
     // Load multiple silhouette variations for dynamic swapping
-    this.load.image('beat-circle', 'https://rosebud.ai/assets/beatCircleUI.png?MECs');
-    this.load.image('dancer-1', 'https://rosebud.ai/assets/ipod_1.png?Ev5j');
-    this.load.image('dancer-3', 'https://rosebud.ai/assets/3416ffd35c26a1752542c0bc288ff84f.png?Eg0q');
+    this.load.image('beat-circle', 'assets/beatcircleui.png');
+    this.load.image('dancer-1', 'assets/ipod_1.png');
+    this.load.image('dancer-3', 'assets/3416ffd35c26a1752542c0bc288ff84f.png');
     // dancer-5 removed
     // dancer-6 removed
     // dancer-7 removed
-    this.load.image('dancer-8', 'https://rosebud.ai/assets/48e6419460e1089bfbbf469f66d5b857.png?6LnL');
-    this.load.image('dancer-9', 'https://rosebud.ai/assets/openart-image_5h9r7RHC_1766769844463_raw.png?mBoh');
-    this.load.image('dancer-11', 'https://rosebud.ai/assets/openart-image_Cj7r3IF8_1766772364490_raw.png?0YIj');
-    this.load.image('dancer-12', 'https://rosebud.ai/assets/openart-image_eC_NokeU_1766772858600_raw.png?1B6r');
-    this.load.image('dancer-13', 'https://rosebud.ai/assets/openart-image_bOVZ_q4e_1766769708364_raw.png?JTXh');
-    this.load.image('dancer-14', 'https://rosebud.ai/assets/openart-image_ej6hcmYK_1766773004301_raw.png?XBXq');
+    this.load.image('dancer-8', 'assets/48e6419460e1089bfbbf469f66d5b857.png');
+    this.load.image('dancer-9', 'assets/openart-image_5h9r7rhc_1766769844463_raw.png');
+    this.load.image('dancer-11', 'assets/openart-image_cj7r3if8_1766772364490_raw.png');
+    this.load.image('dancer-12', 'assets/openart-image_ec_nokeu_1766772858600_raw.png');
+    this.load.image('dancer-13', 'assets/openart-image_bovz_q4e_1766769708364_raw.png');
+    this.load.image('dancer-14', 'assets/openart-image_ej6hcmyk_1766773004301_raw.png');
     // dancer-15 removed
-    this.load.image('dancer-16', 'https://rosebud.ai/assets/openart-image_L0o4fC_g_1766769308945_raw.png?qTri');
-    this.load.image('dancer-17', 'https://rosebud.ai/assets/openart-image_fN9NwtaK_1766769352930_raw.png?YwNB');
-    this.load.image('dancer-18', 'https://rosebud.ai/assets/openart-image_NhN1g02R_1766769862487_raw.png?uDSp');
-    this.load.image('dancer-19', 'https://rosebud.ai/assets/openart-image_NAjwcTbH_1766769722191_raw.png?wrmV');
-    this.load.image('dancer-20', 'https://rosebud.ai/assets/openart-image_N16K-OfJ_1766769295833_raw.png?sGUk');
+    this.load.image('dancer-16', 'assets/openart-image_l0o4fc_g_1766769308945_raw.png');
+    this.load.image('dancer-17', 'assets/openart-image_fn9nwtak_1766769352930_raw.png');
+    this.load.image('dancer-18', 'assets/openart-image_nhn1g02r_1766769862487_raw.png');
+    this.load.image('dancer-19', 'assets/openart-image_najwctbh_1766769722191_raw.png');
+    this.load.image('dancer-20', 'assets/openart-image_n16k-ofj_1766769295833_raw.png');
     // dancer-21 removed
-    this.load.image('dancer-22', 'https://rosebud.ai/assets/openart-image_oa5yTAi5_1766772352539_raw.png?IYcu');
+    this.load.image('dancer-22', 'assets/openart-image_oa5ytai5_1766772352539_raw.png');
     // dancer-23 removed
     // dancer-24 removed
-    this.load.image('dancer-25', 'https://rosebud.ai/assets/openart-image_VrPRs7pd_1766769720970_raw.png?W5Ur');
+    this.load.image('dancer-25', 'assets/openart-image_vrprs7pd_1766769720970_raw.png');
     // dancer-26 removed
     // dancer-27 removed
-    this.load.image('dancer-29', 'https://rosebud.ai/assets/openart-image_1_AKYK0s_1766769096571_raw.png?Sunk');
-    this.load.image('dancer-30', 'https://rosebud.ai/assets/e868c390b62d4df3bb1bdd17395fe41e.png?H2PC');
-    this.load.image('dancer-32', 'https://rosebud.ai/assets/metro girl.png?t5OE');
-    this.load.image('dancer-33', 'https://rosebud.ai/assets/openart-image_k-Mxai4w_1766769199781_raw.png?7hrz');
-    this.load.image('dancer-34', 'https://rosebud.ai/assets/openart-image_S1Am0XLb_1766769052493_raw.png?wSCB');
-    this.load.image('dancer-35', 'https://rosebud.ai/assets/openart-image_vRQgO9cG_1766768971563_raw.png?O3Mx');
-    this.load.image('dancer-36', 'https://rosebud.ai/assets/openart-image_zAZyPC3U_1766768967253_raw.png?AFXg');
-    this.load.image('dancer-37', 'https://rosebud.ai/assets/1ef1da67fdd7c4342f74ffd5dcee1c4c (1).png?iT5f');
-    this.load.image('dancer-38', 'https://rosebud.ai/assets/openart-image_C28fK6GG_1766802182766_raw.png?uOiT');
-    this.load.image('dancer-39', 'https://rosebud.ai/assets/openart-image_L2S8R2Yu_1766801528984_raw.png?B8K5');
-    this.load.image('dancer-40', 'https://rosebud.ai/assets/openart-image_qM4ezQai_1766803187306_raw.png?B71T');
-    this.load.audio('bgm-menu', 'https://rosebud.ai/assets/Back 2 Back by One Wave.mp3?3fMD');
-    this.load.audio('menu-click', 'https://rosebud.ai/assets/Menu Click by Leszek_Szary of freesound_community.mp3?cDI3');
+    this.load.image('dancer-29', 'assets/openart-image_1_akyk0s_1766769096571_raw.png');
+    this.load.image('dancer-30', 'assets/e868c390b62d4df3bb1bdd17395fe41e.png');
+    this.load.image('dancer-32', 'assets/metro-girl.png');
+    this.load.image('dancer-33', 'assets/openart-image_k-mxai4w_1766769199781_raw.png');
+    this.load.image('dancer-34', 'assets/openart-image_s1am0xlb_1766769052493_raw.png');
+    this.load.image('dancer-35', 'assets/openart-image_vrqgo9cg_1766768971563_raw.png');
+    this.load.image('dancer-36', 'assets/openart-image_zazypc3u_1766768967253_raw.png');
+    this.load.image('dancer-37', 'assets/1ef1da67fdd7c4342f74ffd5dcee1c4c-1.png');
+    this.load.image('dancer-38', 'assets/openart-image_c28fk6gg_1766802182766_raw.png');
+    this.load.image('dancer-39', 'assets/openart-image_l2s8r2yu_1766801528984_raw.png');
+    this.load.image('dancer-40', 'assets/openart-image_qm4ezqai_1766803187306_raw.png');
+    this.load.audio('bgm-menu', 'assets/back-2-back-by-one-wave.mp3');
+    this.load.audio('menu-click', 'assets/menu-click-by-leszek_szary-of-freesound_community.mp3');
   }
   create() {
     // Upscale built-in dancer assets if needed
@@ -483,6 +483,14 @@ export default class MenuScene extends Phaser.Scene {
       this.cameras.main.fadeOut(400, 0, 255, 255);
       this.time.delayedCall(400, () => {
         this.scene.start('ImageUploadScene');
+      });
+    });
+    
+    // SETTINGS Button (next to Dancer Lab) — v2
+    this.createHexButton(300, height - 70, 'SET\nTINGS', 0xb967ff, () => {
+      this.cameras.main.fadeOut(400, 185, 103, 255);
+      this.time.delayedCall(400, () => {
+        this.scene.start('SettingsScene');
       });
     });
     

@@ -8,7 +8,7 @@ export default class CreditsScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.audio('menu-click', 'https://rosebud.ai/assets/Menu Click by Leszek_Szary of freesound_community.mp3?cDI3');
+    this.load.audio('menu-click', 'assets/menu-click-by-leszek_szary-of-freesound_community.mp3');
   }
   create() {
     const { width, height } = this.scale;

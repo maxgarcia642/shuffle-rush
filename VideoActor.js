@@ -24,8 +24,11 @@ export default class VideoActor {
     this._video = null;
     this._texture = null;
     this._timer = null;
+    this._texW = 0;
+    this._texH = 0;
     this.ready = false;
     this.onReady = null;
+    this.onError = null;                                // called with (this) if the video fails to load
     this._build();
   }
 
@@ -46,13 +49,24 @@ export default class VideoActor {
       const h = Math.max(2, Math.round(v.videoHeight * scale));
       if (this.scene.textures.exists(this.key)) this.scene.textures.remove(this.key);
       this._texture = this.scene.textures.createCanvas(this.key, w, h);
+      this._texW = w; this._texH = h;
       v.play().catch(() => { /* will start on first gesture */ });
-      this._timer = setInterval(() => this._draw(w, h), 1000 / this.fps);
+      this._startTimer();
       if (this.wantSound) this._armSoundUnlock();
       this.ready = true;
       if (this.onReady) this.onReady(this);
     };
-    v.onerror = () => console.error('VideoActor: video failed to load', this.key);
+    v.onerror = () => {
+      console.error('VideoActor: video failed to load', this.key);
+      // Surface the failure — a caller waiting on onReady would otherwise
+      // hang forever with no way to detect it.
+      if (this.onError) this.onError(this);
+    };
+  }
+
+  _startTimer() {
+    if (this._timer || !this._texture) return;
+    this._timer = setInterval(() => this._draw(this._texW, this._texH), 1000 / this.fps);
   }
 
   _draw(w, h) {
@@ -77,8 +91,16 @@ export default class VideoActor {
     }
   }
 
-  pause() { this._video && this._video.pause(); }
-  resume() { this._video && this._video.play().catch(() => {}); }
+  pause() {
+    this._video && this._video.pause();
+    // Suspend the redraw loop too — it would keep repainting the frozen frame
+    // at full fps while paused.
+    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+  }
+  resume() {
+    this._video && this._video.play().catch(() => {});
+    this._startTimer();
+  }
 
   destroy() {
     if (this._timer) { clearInterval(this._timer); this._timer = null; }

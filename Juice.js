@@ -15,6 +15,8 @@ export default class Juice {
     this.density = Number(scene.registry?.get('particleDensity'));
     if (!Number.isFinite(this.density)) this.density = 1;      // 0 .. 1.5
     this._floaterTimer = null;
+    this._hitstopTimer = null;
+    this._hitstopPrev = null;
   }
 
   setEnabled(on) { this.enabled = !!on; this.scene.registry?.set('juiceOn', this.enabled); }
@@ -32,8 +34,12 @@ export default class Juice {
     if (s._juiceStopped) return;
     s._juiceStopped = true;
     const prevTime = s.time.timeScale, prevTween = s.tweens.timeScale;
+    this._hitstopPrev = { time: prevTime, tween: prevTween };
     s.time.timeScale = scale; s.tweens.timeScale = scale;
-    setTimeout(() => {
+    // Handle retained so destroy() can cancel it — an orphaned restore firing
+    // after scene shutdown/restart would mutate a stale scene's timeScale.
+    this._hitstopTimer = setTimeout(() => {
+      this._hitstopTimer = null; this._hitstopPrev = null;
       s.time.timeScale = prevTime; s.tweens.timeScale = prevTween;
       s._juiceStopped = false;
     }, ms);
@@ -89,5 +95,19 @@ export default class Juice {
     this.scene.tweens.add({ targets: g, alpha: 0, duration: 180, onComplete: () => g.destroy() });
   }
 
-  destroy() { this.stopFloaters(); }
+  destroy() {
+    this.stopFloaters();
+    if (this._hitstopTimer) {
+      clearTimeout(this._hitstopTimer);
+      this._hitstopTimer = null;
+      // Restore timing NOW instead of letting the orphaned callback do it later.
+      const s = this.scene;
+      if (this._hitstopPrev && s?.time) {
+        s.time.timeScale = this._hitstopPrev.time;
+        s.tweens.timeScale = this._hitstopPrev.tween;
+        s._juiceStopped = false;
+      }
+      this._hitstopPrev = null;
+    }
+  }
 }

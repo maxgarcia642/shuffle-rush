@@ -71,6 +71,10 @@ t('mp4 ok under cap', validateFile(F('v.mp4', 'video/mp4', 50e6)).ok);
 t('video over 80MB rejected', !validateFile(F('v.mp4', 'video/mp4', LIMITS.video + 1)).ok);
 t('exe rejected', !validateFile(F('x.exe', 'application/x-dos', 100)).ok);
 t('empty file rejected', !validateFile(F('a.mp3', 'audio/mpeg', 0)).ok);
+// .webm disambiguation: MIME decides when present, extension-only → video
+t('webm with video MIME classified video', classifyFile(F('v.webm', 'video/webm', 1e6)) === 'video');
+t('webm with audio MIME classified audio', classifyFile(F('a.webm', 'audio/webm', 1e6)) === 'audio');
+t('extension-only webm classified video', classifyFile(F('v.webm', '', 1e6)) === 'video');
 
 console.log('── PowerupManager (fake clock) ──');
 {
@@ -116,6 +120,8 @@ t('sfxVol 0 mutes', scaleSfxVolume(0.8, 0) === 0);
 t('sfxVol 1 doubles shipped mix', scaleSfxVolume(0.25, 1) === 0.5);
 t('missing sfxVol treated as default', scaleSfxVolume(0.6, undefined) === 0.6);
 t('missing base volume treated as 1', Math.abs(scaleSfxVolume(undefined, 0.5) - 1) < 1e-9);
+t('result clamps at 1 (no >1 gain clipping)', scaleSfxVolume(0.8, 1) === 1);
+t('result never negative', scaleSfxVolume(-0.5, 0.5) === 0);
 
 console.log('── LeaderboardService (Block 7: pure logic + local guard) ──');
 {

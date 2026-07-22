@@ -95,7 +95,10 @@ const LeaderboardService = {
   _readLocal() {
     try {
       const raw = this._storage?.getItem(LOCAL_KEY);
-      return raw ? JSON.parse(raw) : [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      // Corrupted/foreign storage (object, string…) would make insertScore's
+      // spread throw — normalize anything non-array to an empty list.
+      return Array.isArray(parsed) ? parsed : [];
     } catch { return []; }
   },
 
@@ -134,10 +137,14 @@ const LeaderboardService = {
         const res = await this._db.queryOnce({ scores: { $: { order: { score: 'desc' }, limit: MAX_ENTRIES } } });
         const rows = res?.data?.scores;
         if (Array.isArray(rows)) {
-          return rows.map(r => ({
-            name: r.name, score: r.score, enemies: r.enemies, at: r.at,
-            replay: r.replay ? JSON.parse(r.replay) : null
-          }));
+          return rows.map(r => {
+            // Per-row defensive parse: one malformed replay must not abort
+            // the whole remote list (it would hide every valid score).
+            let replay = null;
+            try { replay = r.replay ? JSON.parse(r.replay) : null; }
+            catch { /* bad replay payload — keep the score, drop the ghost */ }
+            return { name: r.name, score: r.score, enemies: r.enemies, at: r.at, replay };
+          });
         }
       } catch (e) { console.warn('Leaderboard: remote read failed, using local:', e.message || e); }
     }

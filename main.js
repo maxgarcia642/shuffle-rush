@@ -159,6 +159,19 @@ const game = new Phaser.Game(config);
 // ── Write-through persistence: registry → IndexedDB (+ small localStorage cache)
 const persistedBlobs = new Set((await MediaLibrary.listBlobKeys()).map(String));
 
+// Per-prefix serialization: registry.set fires once per uploaded file, and an
+// earlier (smaller) sync overlapping a later one could delete blobs the later
+// invocation just added. Each queued run reads the registry FRESH so it always
+// syncs against the latest map.
+const blobSyncChains = new Map();
+function queueBlobSync(prefix, registryKey, mimeFallback) {
+    const prev = blobSyncChains.get(prefix) || Promise.resolve();
+    const next = prev.then(
+        () => syncBlobMap(prefix, game.registry.get(registryKey), mimeFallback)
+    ).catch(e => console.error('blob sync failed for', prefix, e));
+    blobSyncChains.set(prefix, next);
+}
+
 async function syncBlobMap(prefix, map, mimeFallback) {
     const wanted = new Set(Object.keys(map || {}).map(k => prefix + k));
     for (const k of Object.keys(map || {})) {
@@ -187,11 +200,11 @@ game.registry.events.on('changedata-customTracks', (p, value) => {
     MediaLibrary.setKV('shuffleRushCustomTracks', value);
     Storage.set('shuffleRushCustomTracks', value);
 });
-game.registry.events.on('changedata-customImageData', (p, value) => {
-    syncBlobMap('image:', value, 'image/png');
+game.registry.events.on('changedata-customImageData', () => {
+    queueBlobSync('image:', 'customImageData', 'image/png');
 });
-game.registry.events.on('changedata-customAudioData', (p, value) => {
-    syncBlobMap('audio:', value, 'audio/mpeg');
+game.registry.events.on('changedata-customAudioData', () => {
+    queueBlobSync('audio:', 'customAudioData', 'audio/mpeg');
 });
 game.registry.events.on('changedata-customAnimations', (p, value) => {
     MediaLibrary.setKV('customAnimations', value);

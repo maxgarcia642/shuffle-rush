@@ -23,7 +23,8 @@ export default class ImageUploadScene extends Phaser.Scene {
     // Block 9: honest per-file caps from MediaPipeline (the old 1GB numbers
     // were fiction — base64 in a browser dies long before that). GIFs get the
     // gif cap; plain images the image cap; audio the audio cap.
-    this.MAX_IMAGE_SIZE = LIMITS.gif;   // 15MB — covers gif + image (gif is the larger)
+    this.MAX_IMAGE_SIZE = LIMITS.image; // 10MB
+    this.MAX_GIF_SIZE = LIMITS.gif;     // 15MB
     this.MAX_AUDIO_SIZE = LIMITS.audio; // 40MB
     this.MAX_TOTAL_UPLOAD = Number.MAX_SAFE_INTEGER; // No batch limit - rely on per-file limit instead
     
@@ -421,40 +422,49 @@ export default class ImageUploadScene extends Phaser.Scene {
     // Get canvas element
     const canvas = this.game.canvas;
     
+    // Every listener is retained so shutdown() can removeEventListener them —
+    // re-entering the scene otherwise stacks stale handlers that call into a
+    // destroyed scene instance.
+    this._canvasDragHandlers = [];
+    const listen = (eventName, fn) => {
+      canvas.addEventListener(eventName, fn, false);
+      this._canvasDragHandlers.push([eventName, fn]);
+    };
+    
     // Prevent default drag behavior on the entire document
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-      canvas.addEventListener(eventName, (e) => {
+      listen(eventName, (e) => {
         e.preventDefault();
         e.stopPropagation();
-      }, false);
+      });
     });
     
     // Show drop zone when dragging files over
-    canvas.addEventListener('dragenter', (e) => {
+    listen('dragenter', (e) => {
       if (e.dataTransfer.types.includes('Files')) {
         this.showDropZone();
       }
-    }, false);
+    });
     
     // Keep drop zone visible while hovering
-    canvas.addEventListener('dragover', (e) => {
+    listen('dragover', (e) => {
       if (e.dataTransfer.types.includes('Files')) {
         this.showDropZone();
       }
-    }, false);
+    });
     
     // Hide drop zone when leaving
-    canvas.addEventListener('dragleave', (e) => {
+    listen('dragleave', (e) => {
       // Only hide if we're leaving the canvas entirely
       const rect = canvas.getBoundingClientRect();
       if (e.clientX < rect.left || e.clientX >= rect.right ||
           e.clientY < rect.top || e.clientY >= rect.bottom) {
         this.hideDropZone();
       }
-    }, false);
+    });
     
     // Handle file drop
-    canvas.addEventListener('drop', (e) => {
+    listen('drop', (e) => {
       this.hideDropZone();
       
       // Check cooldown to prevent rapid successive drops
@@ -468,7 +478,7 @@ export default class ImageUploadScene extends Phaser.Scene {
         // Set cooldown AFTER files finish processing, not before
         this.handleDroppedFiles(files);
       }
-    }, false);
+    });
   }
   
   showDropZone() {
@@ -518,10 +528,16 @@ export default class ImageUploadScene extends Phaser.Scene {
     }
   }
   
+  /** Per-file cap: audio / gif / plain image each use their own honest limit. */
+  maxSizeFor(file, isAudio = false) {
+      if (isAudio) return this.MAX_AUDIO_SIZE;
+      const isGif = file.type === 'image/gif' || /\.gif$/i.test(file.name || '');
+      return isGif ? this.MAX_GIF_SIZE : this.MAX_IMAGE_SIZE;
+  }
+
   validateFileSize(file, isAudio = false) {
       if (!file || !file.size) return false; // Block 9: 0-byte files are junk
-      const maxSize = isAudio ? this.MAX_AUDIO_SIZE : this.MAX_IMAGE_SIZE;
-      return file.size <= maxSize;
+      return file.size <= this.maxSizeFor(file, isAudio);
   }
   
   formatFileSize(bytes) {
@@ -557,7 +573,7 @@ export default class ImageUploadScene extends Phaser.Scene {
         if (!this.validateFileSize(file, false)) {
           rejectedFiles.push({
             name: file.name,
-            reason: `exceeds ${this.formatFileSize(this.MAX_IMAGE_SIZE)} limit`
+            reason: `exceeds ${this.formatFileSize(this.maxSizeFor(file, false))} limit`
           });
         } else {
           imageFiles.push(file);
@@ -988,16 +1004,12 @@ export default class ImageUploadScene extends Phaser.Scene {
     input.style.outline = 'none';
     document.body.appendChild(input);
     
-    input.addEventListener('keyup', () => {
+    // 'input' fires for EVERY value change — typing, paste, autofill, IME
+    // commits, and the search field's ✕ clear button (keyup alone misses the
+    // non-keyboard edits).
+    input.addEventListener('input', () => {
       if (this.searchQuery !== input.value) {
         this.searchQuery = input.value;
-        this.refreshGalleryDebounced(120);
-      }
-    });
-    // 'search' inputs fire this when the ✕ clear button is pressed
-    input.addEventListener('input', () => {
-      if (input.value === '' && this.searchQuery !== '') {
-        this.searchQuery = '';
         this.refreshGalleryDebounced(120);
       }
     });
@@ -1075,6 +1087,16 @@ export default class ImageUploadScene extends Phaser.Scene {
               }
           });
           this.fileInputs = [];
+      }
+      // Unbind the canvas drag-and-drop listeners registered in
+      // setupDragAndDrop() — they close over this scene instance and would
+      // otherwise stack up (and fire on a dead scene) across re-entries.
+      if (this._canvasDragHandlers) {
+          const canvas = this.game.canvas;
+          this._canvasDragHandlers.forEach(([eventName, fn]) => {
+              canvas.removeEventListener(eventName, fn, false);
+          });
+          this._canvasDragHandlers = null;
       }
   }
 
@@ -1307,7 +1329,7 @@ export default class ImageUploadScene extends Phaser.Scene {
         if (!this.validateFileSize(file, false)) {
             rejectedFiles.push({
                 name: file.name,
-                reason: `exceeds ${this.formatFileSize(this.MAX_IMAGE_SIZE)} limit`
+                reason: `exceeds ${this.formatFileSize(this.maxSizeFor(file, false))} limit`
             });
         } else {
             validFiles.push(file);
@@ -2354,7 +2376,10 @@ export default class ImageUploadScene extends Phaser.Scene {
       if (this.registry.get('selectedVideoKey') === keyToRemove) {
           this.registry.set('selectedVideoKey', null);
       }
-      MediaLibrary.deleteBlob('video:' + keyToRemove).catch(e => console.warn('video blob delete failed:', e));
+      // deleteBlob resolves a boolean (never rejects) — check it, don't .catch it.
+      MediaLibrary.deleteBlob('video:' + keyToRemove).then(ok => {
+          if (!ok) console.warn('video blob delete failed:', keyToRemove);
+      });
       const thumbKey = 'vthumb-' + keyToRemove;
       if (this.textures.exists(thumbKey)) this.textures.remove(thumbKey);
       this.refreshGallery();

@@ -24,8 +24,14 @@ export function classifyFile(file) {
   const type = file.type || '';
   if (type === 'image/gif' || name.endsWith('.gif')) return 'gif';
   if (type.startsWith('image/') || IMAGE_EXT.some(e => name.endsWith(e))) return 'image';
-  if (type.startsWith('audio/') || AUDIO_EXT.some(e => name.endsWith(e))) return 'audio';
-  if (type.startsWith('video/') || VIDEO_EXT.some(e => name.endsWith(e))) return 'video';
+  // MIME first — it disambiguates .webm (audio/webm vs video/webm).
+  if (type.startsWith('audio/')) return 'audio';
+  if (type.startsWith('video/')) return 'video';
+  // Extension-only fallback: video before audio so a bare .webm classifies as
+  // video (the common case for uploads) instead of being rejected by the
+  // video flow.
+  if (VIDEO_EXT.some(e => name.endsWith(e))) return 'video';
+  if (AUDIO_EXT.some(e => name.endsWith(e))) return 'audio';
   return 'unknown';
 }
 

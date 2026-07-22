@@ -151,28 +151,56 @@ const MediaLibrary = {
     const db = await this.open(); if (!db) return { migrated: false };
     const done = await this.getKV('migration-v1-done', false);
     if (done) return { migrated: false, already: true };
-    const report = { tracks: 0, images: 0, anims: 0 };
+    const report = { tracks: 0, images: 0, anims: 0, failures: 0 };
+    // Per-item fault isolation: one corrupt base64 payload (atob throws) or
+    // one failed putBlob must not abort the rest of the migration — and a
+    // legacy payload key may only be purged once EVERY item in it landed in
+    // IDB, or a partial failure would permanently drop that media.
+    const migrateMap = async (storageKey, prefix, mime, onOk) => {
+      const map = (Storage && Storage.get(storageKey)) || {};
+      let failed = 0;
+      for (const k of Object.keys(map)) {
+        try {
+          if (await this.putBlob(prefix + k, base64ToBlob(map[k], mime))) onOk();
+          else failed++;
+        } catch (e) { console.warn('migration item failed:', prefix + k, e); failed++; }
+      }
+      return failed;
+    };
     try {
-      const audio = (Storage && Storage.get('shuffleRushCustomAudioData')) || {};
-      for (const k of Object.keys(audio)) {
-        if (await this.putBlob('audio:' + k, base64ToBlob(audio[k], 'audio/mpeg'))) report.tracks++;
-      }
-      const images = (Storage && Storage.get('shuffleRushCustomImageData')) || {};
-      for (const k of Object.keys(images)) {
-        if (await this.putBlob('image:' + k, base64ToBlob(images[k], 'image/png'))) report.images++;
-      }
+      const audioFailed = await migrateMap('shuffleRushCustomAudioData', 'audio:', 'audio/mpeg', () => report.tracks++);
+      const imageFailed = await migrateMap('shuffleRushCustomImageData', 'image:', 'image/png', () => report.images++);
+      let animsFailed = 0;
       const anims = (Storage && Storage.get('shuffleRushCustomAnimations')) || {};
-      if (Object.keys(anims).length) { await this.setKV('customAnimations', anims); report.anims = Object.keys(anims).length; }
+      if (Object.keys(anims).length) {
+        if (await this.setKV('customAnimations', anims)) report.anims = Object.keys(anims).length;
+        else animsFailed = 1;
+      }
       for (const meta of ['shuffleRushCustomTracks', 'shuffleRushCustomDancers']) {
         const v = Storage && Storage.get(meta);
         if (v) await this.setKV(meta, v);
       }
-      // Free the quota hogs (payloads only — metadata cache stays).
-      for (const big of ['shuffleRushCustomAudioData', 'shuffleRushCustomImageData', 'shuffleRushCustomAnimations']) {
-        try { localStorage.removeItem(big); localStorage.removeItem(big + '_lz'); } catch (e) { /* ignore */ }
+      // Free the quota hogs (payloads only — metadata cache stays), but ONLY
+      // the keys whose contents fully migrated.
+      const clearable = [
+        [audioFailed, 'shuffleRushCustomAudioData'],
+        [imageFailed, 'shuffleRushCustomImageData'],
+        [animsFailed, 'shuffleRushCustomAnimations']
+      ];
+      for (const [failed, big] of clearable) {
+        if (failed === 0) {
+          try { localStorage.removeItem(big); localStorage.removeItem(big + '_lz'); } catch (e) { /* ignore */ }
+        }
       }
-      await this.setKV('migration-v1-done', true);
-      console.log('✅ MediaLibrary migration complete:', report);
+      report.failures = audioFailed + imageFailed + animsFailed;
+      if (report.failures === 0) {
+        await this.setKV('migration-v1-done', true);
+        console.log('✅ MediaLibrary migration complete:', report);
+      } else {
+        // Not marked done: failed items stay in localStorage and are retried
+        // next boot (already-migrated blobs just overwrite themselves).
+        console.warn('⚠ MediaLibrary migration partial — will retry failed items next boot:', report);
+      }
       return { migrated: true, ...report };
     } catch (e) {
       console.error('MediaLibrary migration failed (legacy data left intact):', e);

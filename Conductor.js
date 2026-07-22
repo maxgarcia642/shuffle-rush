@@ -19,7 +19,9 @@ export default class Conductor extends Phaser.Events.EventEmitter {
     this.offsetMs = 0;                                  // beat-grid offset from track analysis
     this.userLatencyMs = Number(scene?.registry?.get('latencyOffsetMs')) || 0; // calibration
     this._ctx = null;
+    this._ownsCtx = false;                              // true only for self-created fallback contexts
     this._running = false;
+    this._gen = 0;                                      // schedule generation — invalidates queued beat timeouts
     this._lookaheadMs = 25;                             // scheduler tick
     this._scheduleAheadS = 0.12;                        // schedule window (~120ms)
     this._nextBeatTime = 0;                             // audio-clock seconds
@@ -39,8 +41,10 @@ export default class Conductor extends Phaser.Events.EventEmitter {
         this._ctx = sm.context;                          // reuse Phaser's WebAudio context
       } else if (typeof AudioContext !== 'undefined') {
         this._ctx = new AudioContext();
+        this._ownsCtx = true;                            // we created it — we close it
       } else if (typeof webkitAudioContext !== 'undefined') {
         this._ctx = new webkitAudioContext();            // eslint-disable-line no-undef
+        this._ownsCtx = true;
       }
     }
     return this._ctx;
@@ -61,6 +65,7 @@ export default class Conductor extends Phaser.Events.EventEmitter {
     const c = this.ctx;
     if (c && c.state === 'suspended') { try { c.resume(); } catch (e) { /* gesture-gated */ } }
     this._running = true;
+    this._gen++;                                        // new schedule — orphan any queued beats
     this._beatNumber = 0;
     this._nextBeatTime = this.now() + 0.1;
     this._timer = setInterval(() => this._schedule(), this._lookaheadMs);
@@ -69,6 +74,7 @@ export default class Conductor extends Phaser.Events.EventEmitter {
 
   stop() {
     this._running = false;
+    this._gen++;                                        // invalidate beats already sitting in setTimeout
     if (this._timer) { clearInterval(this._timer); this._timer = null; }
   }
 
@@ -84,7 +90,11 @@ export default class Conductor extends Phaser.Events.EventEmitter {
 
   _emitAt(atTime, beat) {
     const delayMs = Math.max(0, (atTime - this.now()) * 1000);
-    setTimeout(() => { if (this._running) this.emit('beat', { beat, atTime }); }, delayMs);
+    // Generation token: stop()/start()/syncToPhaserSound() bump _gen, so a
+    // beat queued before a quick pause/resume or a grid resync can never fire
+    // into the NEW schedule (duplicate/out-of-phase beat events).
+    const gen = this._gen;
+    setTimeout(() => { if (this._running && gen === this._gen) this.emit('beat', { beat, atTime }); }, delayMs);
     // NOTE: the setTimeout jitter (±few ms) affects VISUAL beat events only.
     // Judgment never uses event timing — it compares against nowMs() directly.
   }
@@ -120,18 +130,35 @@ export default class Conductor extends Phaser.Events.EventEmitter {
     }
     this._beatNumber = 0;
     this._nextBeatTime = anchor;
+    this._gen++;                                        // resync — orphan beats queued on the old grid
   }
 
-  /** Song position in ms if a sound is bound (uses Phaser's context-derived seek). */
+  /**
+   * RAW song position in ms if a sound is bound (Phaser's context-derived
+   * seek, time-from-song-start). No beat-grid offset is subtracted — chart
+   * note times are raw song time per the ChartFormat spec, and recording +
+   * playback must share this exact clock.
+   */
   songPositionMs() {
     const s = this._boundSound;
-    if (s && typeof s.seek === 'number' && s.isPlaying) return s.seek * 1000 - this.offsetMs;
+    if (s && typeof s.seek === 'number' && s.isPlaying) return s.seek * 1000;
     return this.nowMs();
   }
 
   judge(deltaMs, windows) { return ConductorMath.judge(deltaMs, windows || Conductor.DEFAULT_WINDOWS); }
 
-  destroy() { this.stop(); this.removeAllListeners(); this._boundSound = null; }
+  destroy() {
+    this.stop();
+    this.removeAllListeners();
+    this._boundSound = null;
+    // Close only contexts WE created (Phaser owns its own). Browsers cap
+    // concurrent AudioContexts — leaking one per scene restart exhausts them.
+    if (this._ownsCtx && this._ctx) {
+      try { this._ctx.close(); } catch (e) { /* already closed */ }
+    }
+    this._ctx = null;
+    this._ownsCtx = false;
+  }
 }
 
 /** Shipped-feel defaults (matches the live 100/200/300ms tiers); Settings can scale. */
@@ -153,7 +180,7 @@ export const ConductorMath = {
     if (d <= w.ok) return 'ok';
     return 'miss';
   },
-  /** Phase continuity check helper: next beat time after a bpm change. */
+  /** Phase continuity check: TRUE if the beat following lastScheduledS (at the given bpm) is still in the future. */
   nextBeatAfter(nowS, lastScheduledS, bpm) { return lastScheduledS + 60 / bpm > nowS; },
   /**
    * Block 1: time-driven marker fall. Returns y for a marker at audio-clock

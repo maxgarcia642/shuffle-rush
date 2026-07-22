@@ -88,7 +88,7 @@ function makeBeatWav(seconds = 4, sr = 44100) {
         data.writeInt16LE(Math.round(s * 32767), i * 2);
     }
     const hdr = Buffer.alloc(44);
-    hdr.write('RIFF', 0); hdr.writeUInt32BE(0, 4); hdr.writeUInt32LE(36 + data.length, 4);
+    hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + data.length, 4);
     hdr.write('WAVE', 8); hdr.write('fmt ', 12);
     hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(1, 22);
     hdr.writeUInt32LE(sr, 24); hdr.writeUInt32LE(sr * 2, 28);

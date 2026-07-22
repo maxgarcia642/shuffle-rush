@@ -97,7 +97,9 @@ export default class SettingsScene extends Phaser.Scene {
     const d = Number(r.get('particleDensity')); this._densityLabel.setText(['OFF', 'LOW', 'FULL', 'MAX'][[0, 0.5, 1, 1.5].indexOf(Number.isFinite(d) ? d : 1)] || 'FULL');
     this._musicLabel.setText(Math.round((r.get('musicVol') ?? 0.4) * 100) + '%');
     this._sfxLabel.setText(Math.round((r.get('sfxVol') ?? 0.5) * 100) + '%');
-    this._calLabel.setText((r.get('latencyOffsetMs') || 0) + ' ms');
+    // Skip while calibrating — the row-click refresh would overwrite the
+    // 'TAP THE CLICKS…' prompt that _runCalibration() just set.
+    if (!this._calibrating) this._calLabel.setText((r.get('latencyOffsetMs') || 0) + ' ms');
     this._vidLabel.setText(r.get('videoBgEnabled') ? 'ON' : 'OFF');
     this._vidSoundLabel.setText(r.get('videoBgSound') ? 'ON' : 'OFF');
     this._vsLabel.setText(r.get('videoOpponentEnabled') ? 'ON' : 'OFF');
@@ -118,20 +120,27 @@ export default class SettingsScene extends Phaser.Scene {
     this.registry.set('particleDensity', steps[idx]);
   }
   _cycleVol(key) {
-    const steps = [0, 0.2, 0.4, 0.6, 0.8, 1];
+    // 0.5 must be a member: it is the sfxVol default — without it the first
+    // click fell through indexOf(-1) straight to 0 (mute).
+    const steps = [0, 0.2, 0.4, 0.5, 0.6, 0.8, 1];
     const cur = Number(this.registry.get(key));
-    const idx = (steps.indexOf(Number.isFinite(cur) ? cur : 0.4) + 1) % steps.length;
-    this.registry.set(key, steps[idx]);
+    const fallback = key === 'sfxVol' ? 0.5 : 0.4;
+    let idx = steps.indexOf(Number.isFinite(cur) ? cur : fallback);
+    if (idx === -1) idx = steps.indexOf(fallback);       // off-grid value: restart from default
+    this.registry.set(key, steps[(idx + 1) % steps.length]);
   }
 
   _runCalibration() {
+    if (this._calibrating) return;                       // one run at a time
+    this._calibrating = true;
     this._calLabel.setText('TAP THE CLICKS…');
     const cal = new Calibration(this);
     const ok = cal.start((offset, err) => {
+      this._calibrating = false;
       if (err) { this._calLabel.setText('FAILED — RETRY'); return; }
       this._calLabel.setText(offset + ' ms ✓');
     });
-    if (!ok) this._calLabel.setText('NO AUDIO CTX');
+    if (!ok) { this._calibrating = false; this._calLabel.setText('NO AUDIO CTX'); }
   }
 
   _pickVideo() {

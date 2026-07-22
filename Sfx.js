@@ -14,7 +14,9 @@ export function scaleSfxVolume(baseVolume, sfxVol) {
   const s = Number(sfxVol);
   const setting = Number.isFinite(s) ? Math.max(0, Math.min(1, s)) : 0.5;
   const base = Number.isFinite(Number(baseVolume)) ? Number(baseVolume) : 1;
-  return base * setting / 0.5;
+  // Clamp the RESULT too: base 1 at sfxVol 1 would otherwise route gain 2 —
+  // clipping / invalid volume territory depending on the audio backend.
+  return Math.max(0, Math.min(1, base * setting / 0.5));
 }
 
 /** Wrap the game-wide SoundManager so all manager.play() SFX respect sfxVol. */

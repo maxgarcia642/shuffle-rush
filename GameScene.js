@@ -239,7 +239,9 @@ export default class GameScene extends Phaser.Scene {
     this.powerups = new PowerupManager(this, {
       onApply: (id, def) => this.showFeedback(def.label + '!', def.color)
     });
-    ThemeManager.applyToGameScene(this);
+    // NOTE: ThemeManager.applyToGameScene() runs LATER in create(), after
+    // laneConfig and the player/enemy exist — here it would be a no-op on
+    // all three (neonColors was already themed above).
     this._setupVideoLayers();
     this.events.once('shutdown', () => {
       this.juice?.destroy();
@@ -493,6 +495,11 @@ export default class GameScene extends Phaser.Scene {
             keys: ['8', '9', '0', 'I', 'O', 'P', 'J', 'K', 'L', 'N', 'M', 'RIGHT'] 
         }  // Right - Yellow
     ];
+    
+    // Theme the lane colors (and player/enemy tints) NOW — laneConfig and the
+    // actors finally exist, and the target zones below sample lane.color at
+    // creation time.
+    ThemeManager.applyToGameScene(this);
     
     this.targetZones = [];
     
@@ -2147,9 +2154,15 @@ export default class GameScene extends Phaser.Scene {
                 this.showFeedback('ANALYZING BEATS...', 0xffffff);
                 
                 // Use a slight delay to allow the UI to update if needed
+                const analyzedSound = this.currentTrack;   // snapshot for the stale-guard below
                 this.time.delayedCall(100, async () => {
                     const grid = await BeatDetector.detectBeatGrid(audioBuffer);
+                    // Cache is always safe to fill — it's keyed by track.
                     this.detectedBPMs.set(track.key, { bpm: grid.bpm, offset: grid.offset });
+                    // But GLOBAL playback state may only change if this track
+                    // is still the current one — skipping tracks quickly would
+                    // otherwise resync the conductor to a stale song's grid.
+                    if (this.currentTrackKey !== track.key || this.currentTrack !== analyzedSound) return;
                     this.updateSystemBPM(grid.bpm);
                     // Align the beat grid to the track's own first-beat offset
                     this.rhythmSystem.syncToPhaserSound(this.currentTrack, grid.offset);
@@ -2688,14 +2701,18 @@ export default class GameScene extends Phaser.Scene {
   }
   
   _removePlaylistSearchInput() {
+    // DOM element only — the anchor must survive because
+    // _createPlaylistSearchInput() calls this right before creating the new
+    // input, and the position sync needs the anchor showPlaylistDisplay()
+    // just set. The anchor is cleared on panel teardown (hide) instead.
     if (this._playlistSearchEl) { this._playlistSearchEl.remove(); this._playlistSearchEl = null; }
-    this._playlistSearchAnchor = null;
   }
   
   hidePlaylistDisplay() {
     if (!this.playlistDisplayVisible) return;
     this.playlistDisplayVisible = false;
     this._removePlaylistSearchInput();
+    this._playlistSearchAnchor = null;                 // panel teardown — anchor dies with the container
     
     if (this.playlistContainer) {
       this.tweens.add({
@@ -2946,13 +2963,13 @@ export default class GameScene extends Phaser.Scene {
       const currentTotalEnemies = parseInt(localStorage.getItem('shuffleRushTotalEnemies') || '0');
       localStorage.setItem('shuffleRushTotalEnemies', (currentTotalEnemies + this.enemiesDefeated).toString());
       
-      // Block 7: submit the run to the leaderboard (local list always; remote
-      // only when InstantDB is configured) with the ghost replay attached.
+      // Block 7: finish the ghost replay now (the recorder needs the run's
+      // end moment) but DON'T submit yet — submission happens once, from the
+      // SAVE SCORE button, under the name the player actually enters.
+      // Auto-submitting 'PLAYER' here created duplicate leaderboard rows.
+      this._finishedReplay = null;
       if (this.replayRecorder && this.score > 0) {
-          const replay = this.replayRecorder.finish();
-          LeaderboardService.submitScore({
-              name: 'PLAYER', score: this.score, enemies: this.enemiesDefeated, replay
-          }).catch(e => console.warn('leaderboard submit failed:', e));
+          this._finishedReplay = this.replayRecorder.finish();
           this.replayRecorder = null;
       }
       
@@ -3231,18 +3248,15 @@ export default class GameScene extends Phaser.Scene {
           if (isEditing) return;
           this.sound.play('successful-hit', { volume: 0.5 });
           
-          // Save to Leaderboard
-          const leaderboard = JSON.parse(localStorage.getItem('shuffleRushLeaderboard') || '[]');
-          leaderboard.push({
+          // Save to Leaderboard — LeaderboardService is the single write path
+          // (local top-10 always; remote when InstantDB is configured), with
+          // the ghost replay attached under the player's chosen name.
+          LeaderboardService.submitScore({
               name: playerName,
               score: this.score,
               enemies: this.enemiesDefeated,
-              date: new Date().toLocaleDateString()
-          });
-          
-          // Sort and keep top 10
-          leaderboard.sort((a, b) => b.score - a.score);
-          localStorage.setItem('shuffleRushLeaderboard', JSON.stringify(leaderboard.slice(0, 10)));
+              replay: this._finishedReplay
+          }).catch(e => console.warn('leaderboard submit failed:', e));
           
           // Visual feedback
           submitText.setText('RECORDED!');

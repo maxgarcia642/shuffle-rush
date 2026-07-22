@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import RhythmSystem from './RhythmSystem.js';
+import { ConductorMath } from './Conductor.js';
 import Player from './Player.js';
 import Enemy from './Enemy.js';
 import BeatDetector from './BeatDetector.js';
@@ -636,6 +637,9 @@ export default class GameScene extends Phaser.Scene {
     const markerData = {
       sprite: markerContainer,
       targetTime: this.rhythmSystem.nowMs() + travelTime,
+      travelTime: travelTime,
+      spawnY: height * 0.2,
+      targetY: height * 0.85,
       requiredKey: selectedKey,
       laneX: lane.x,
       laneColor: lane.color,
@@ -643,19 +647,47 @@ export default class GameScene extends Phaser.Scene {
     };
     this.beatMarkers.push(markerData);
     
-    // Animate marker falling to target zone
-    this.tweens.add({
-      targets: markerContainer,
-      y: height * 0.85,
-      duration: travelTime,
-      ease: 'Linear',
-      onComplete: () => {
-        if (!markerData.hit) {
-          this.handleMiss(markerData);
+    if (GameScene.MARKER_TWEEN_FALLBACK) {
+      // Legacy path: tween-driven fall + tween-onComplete miss detection.
+      // Kept only as an emergency fallback; judgment/visual sync is worse here
+      // because frame drops make the tween trail the audio clock.
+      this.tweens.add({
+        targets: markerContainer,
+        y: markerData.targetY,
+        duration: travelTime,
+        ease: 'Linear',
+        onComplete: () => {
+          if (!markerData.hit) {
+            this.handleMiss(markerData);
+          }
         }
+      });
+    }
+    // Default path: marker y is driven from conductor time in update() —
+    // see updateMarkerPositions(). Miss detection happens there too.
+  }
+  
+  /**
+   * v2.1 (Block 1): drive marker fall from the audio clock instead of tweens,
+   * so visuals can never trail judgment under frame drops. Also sweeps misses:
+   * a marker dies when it is later than the widest (late) hit window, which —
+   * unlike the old tween-onComplete — makes late hits actually reachable.
+   */
+  updateMarkerPositions() {
+    if (GameScene.MARKER_TWEEN_FALLBACK) return;
+    if (this.isPaused || this.isDying || !this.rhythmSystem || !this.beatMarkers) return;
+    const now = this.rhythmSystem.nowMs();
+    const lateWindow = 300 * (this.powerups ? this.powerups.windowScale() : 1);
+    // Iterate over a copy: handleMiss splices this.beatMarkers.
+    for (const marker of [...this.beatMarkers]) {
+      if (marker.hit || !marker.sprite) continue;
+      if (marker.travelTime === undefined) continue; // safety: pre-v2.1 marker
+      if (now - marker.targetTime > lateWindow) {
+        this.handleMiss(marker);
+        continue;
       }
-    });
-    // Background pulse (More intense in Fever Mode) handled above now
+      marker.sprite.y = ConductorMath.markerY(now, marker.targetTime, marker.travelTime, marker.spawnY, marker.targetY);
+    }
   }
   
   onHitInput(event, tappedLaneIdx = null) {
@@ -1876,6 +1908,9 @@ export default class GameScene extends Phaser.Scene {
     
     if (this.isPaused) {
       // Pause the game
+      // The conductor's audio clock keeps ticking while paused, so remember
+      // when the pause began — resume shifts marker targets by the gap.
+      this._pauseStartedMs = this.rhythmSystem.nowMs();
       this.rhythmSystem.stop();
       this.physics.pause();
       this.tweens.pauseAll();
@@ -1898,6 +1933,15 @@ export default class GameScene extends Phaser.Scene {
       this.showPauseMenu();
     } else {
       // Resume the game
+      // Shift every in-flight marker forward by the paused duration so both
+      // judgment and the time-driven fall pick up exactly where they stopped.
+      if (this._pauseStartedMs !== undefined) {
+        const pausedFor = this.rhythmSystem.nowMs() - this._pauseStartedMs;
+        if (pausedFor > 0 && this.beatMarkers) {
+          for (const m of this.beatMarkers) m.targetTime += pausedFor;
+        }
+        this._pauseStartedMs = undefined;
+      }
       this.rhythmSystem.start();
       this.physics.resume();
       this.tweens.resumeAll();
@@ -3177,7 +3221,10 @@ celebrateHighScore() {
   }
   
   update() {
-    // Game loop
+    this.updateMarkerPositions();
   }
 }
+
+// Block 1 escape hatch: set true to restore the legacy tween-driven marker fall.
+GameScene.MARKER_TWEEN_FALLBACK = false;
 

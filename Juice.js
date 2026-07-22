@@ -1,5 +1,5 @@
-/**
 import Phaser from 'phaser';
+/**
  * Juice — screen shake, hit-stop, floaters, bursts, beat pulse (v2).
  * Complements (does not replace) the scene's existing effect arsenal — this is
  * the reusable, settings-aware layer on top. All calls no-op when juiceOn is

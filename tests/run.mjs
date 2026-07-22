@@ -24,6 +24,14 @@ t('judge -150ms = good', ConductorMath.judge(-150, W) === 'good');
 t('judge 250ms = ok', ConductorMath.judge(250, W) === 'ok');
 t('judge 301ms = miss', ConductorMath.judge(301, W) === 'miss');
 
+console.log('── ConductorMath.markerY (Block 1: time-driven marker fall) ──');
+// spawn at y=150, line at y=650, 1000ms travel, targetTime=5000
+t('markerY at spawn (t=4000) = spawnY', ConductorMath.markerY(4000, 5000, 1000, 150, 650) === 150);
+t('markerY halfway (t=4500) = midpoint', ConductorMath.markerY(4500, 5000, 1000, 150, 650) === 400);
+t('markerY at targetTime = targetY (ON the line)', ConductorMath.markerY(5000, 5000, 1000, 150, 650) === 650);
+t('markerY before spawn clamps to spawnY', ConductorMath.markerY(3000, 5000, 1000, 150, 650) === 150);
+t('markerY overshoot caps at 1.15', ConductorMath.markerY(9999, 5000, 1000, 150, 650) === 150 + 500 * 1.15);
+
 console.log('── BeatDetector (synthetic 128 BPM @ 48kHz click track) ──');
 {
   const sr = 48000, bpm = 128, beatLen = 60 / bpm, offset = 0.25, seconds = 12;

@@ -154,5 +154,14 @@ export const ConductorMath = {
     return 'miss';
   },
   /** Phase continuity check helper: next beat time after a bpm change. */
-  nextBeatAfter(nowS, lastScheduledS, bpm) { return lastScheduledS + 60 / bpm > nowS; }
+  nextBeatAfter(nowS, lastScheduledS, bpm) { return lastScheduledS + 60 / bpm > nowS; },
+  /**
+   * Block 1: time-driven marker fall. Returns y for a marker at audio-clock
+   * time nowMs, clamped to [spawnY, targetY + 15% overshoot past the line].
+   */
+  markerY(nowMs, targetTime, travelTime, spawnY, targetY) {
+    const progress = 1 - (targetTime - nowMs) / travelTime;
+    const p = Math.max(0, Math.min(1.15, progress));
+    return spawnY + (targetY - spawnY) * p;
+  }
 };

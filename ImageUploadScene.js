@@ -4,6 +4,7 @@ import Phaser from 'phaser';
 import { parseGIF, decompressFrames } from 'https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm';
 import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
 import MediaLibrary from './MediaLibrary.js';
+import { search } from './SearchIndex.js';
 
 export default class ImageUploadScene extends Phaser.Scene {
   constructor() {
@@ -351,6 +352,11 @@ export default class ImageUploadScene extends Phaser.Scene {
         this.isDragging = false;
         this.dragSide = null;
     });
+    
+    // --- 4.5 Search bar (Block 5) — DOM input over the canvas, same overlay
+    // pattern as setupMobileFileUpload/updateDOMButtonPosition.
+    this.searchQuery = '';
+    this._createSearchInput();
     
     // --- 5. Drag and Drop Setup ---
     this.setupDragAndDrop();
@@ -948,6 +954,50 @@ export default class ImageUploadScene extends Phaser.Scene {
     this.updateDOMButtonPosition(fileInput, buttonContainer);
   }
   
+  /**
+   * Block 5: live search over dancers + tracks (+ videos). A real DOM <input>
+   * positioned over the canvas — reuses the fileInputs position-sync loop in
+   * update() and the shutdown() cleanup, same as the upload overlays.
+   */
+  _createSearchInput() {
+    // Invisible Phaser anchor the DOM input tracks (top-left, opposite CLEAR)
+    this.searchAnchor = this.add.rectangle(160, 40, 280, 36, 0x000000, 0);
+    
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.placeholder = '🔎 search dancers & tracks…';
+    input.autocomplete = 'off';
+    input.style.position = 'absolute';
+    input.style.zIndex = '1000';
+    input.style.background = 'rgba(0,0,0,0.75)';
+    input.style.border = '2px solid #00ffff';
+    input.style.borderRadius = '6px';
+    input.style.color = '#ffffff';
+    input.style.fontFamily = 'Arial, sans-serif';
+    input.style.fontSize = '14px';
+    input.style.padding = '2px 8px';
+    input.style.outline = 'none';
+    document.body.appendChild(input);
+    
+    input.addEventListener('keyup', () => {
+      if (this.searchQuery !== input.value) {
+        this.searchQuery = input.value;
+        this.refreshGalleryDebounced(120);
+      }
+    });
+    // 'search' inputs fire this when the ✕ clear button is pressed
+    input.addEventListener('input', () => {
+      if (input.value === '' && this.searchQuery !== '') {
+        this.searchQuery = '';
+        this.refreshGalleryDebounced(120);
+      }
+    });
+    
+    if (!this.fileInputs) this.fileInputs = [];
+    this.fileInputs.push({ element: input, target: this.searchAnchor });
+    this.updateDOMButtonPosition(input, this.searchAnchor);
+  }
+
   updateDOMButtonPosition(element, target) {
     if (!this.scale || !this.scale.canvas) return;
     
@@ -2722,10 +2772,29 @@ export default class ImageUploadScene extends Phaser.Scene {
           this.emptyText = null;
       }
       
-      const customDancers = this.registry.get('customDancers') || [];
-      const customTracks = this.registry.get('customTracks') || [];
-      const customVideos = this.registry.get('customVideos') || [];
+      let customDancers = this.registry.get('customDancers') || [];
+      let customTracks = this.registry.get('customTracks') || [];
+      let customVideos = this.registry.get('customVideos') || [];
       const { width, height } = this.scale;
+      
+      // Block 5: live search filter (dancers by key/filename, tracks by
+      // title/artist weighted, videos by name). Empty query = full lists.
+      const q = (this.searchQuery || '').trim();
+      if (q) {
+          customDancers = search(customDancers.map(key => ({ key })), q, [{ name: 'key', weight: 1 }]).map(o => o.key);
+          customTracks = search(customTracks, q, [{ name: 'title', weight: 2 }, { name: 'artist', weight: 1 }]);
+          customVideos = search(customVideos, q, [{ name: 'name', weight: 1 }]);
+      }
+      
+      if (q && customDancers.length === 0 && customTracks.length === 0 && customVideos.length === 0) {
+          this.emptyText = this.add.text(width/2, this.galleryViewportY + this.galleryViewportHeight/2, `No matches for "${q}"`, {
+              fontSize: '24px',
+              fontFamily: 'Arial',
+              color: '#ffff00',
+              align: 'center'
+          }).setOrigin(0.5);
+          return;
+      }
       
       if (customDancers.length === 0 && customTracks.length === 0 && customVideos.length === 0) {
           // Add to scene directly (not masked container)

@@ -9,6 +9,7 @@ import Juice from './Juice.js';
 import PowerupManager from './Powerups.js';
 import MediaLibrary from './MediaLibrary.js';
 import VideoActor from './VideoActor.js';
+import { search } from './SearchIndex.js';
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
@@ -242,6 +243,7 @@ export default class GameScene extends Phaser.Scene {
       this.juice?.destroy();
       this.videoBg?.destroy();
       this.videoGuest?.destroy();
+      this._removePlaylistSearchInput();
     });
     
     // Add radial gradient overlay
@@ -2412,12 +2414,50 @@ export default class GameScene extends Phaser.Scene {
     closeBtn.on('pointerdown', () => this.hidePlaylistDisplay());
     this.playlistContainer.add(closeBtn);
     
-    // Track list area
-    const listStartY = panelY - panelHeight / 2 + 90;
+    // Block 5: search input over the panel (DOM element, canvas-positioned).
+    // Filters this.playlist live; empty query restores the full list.
+    const searchAnchor = this.add.rectangle(panelX, panelY - panelHeight / 2 + 68, panelWidth - 80, 30, 0x000000, 0);
+    this.playlistContainer.add(searchAnchor);
+    this._playlistSearchAnchor = searchAnchor;
+    this._createPlaylistSearchInput();
+    
+    // Track list area (nudged down to fit the search bar)
+    const listStartY = panelY - panelHeight / 2 + 108;
     const trackSpacing = 48;
     
-    // Create track entries
-    this.playlist.forEach((track, index) => {
+    // Entries live in their own sub-container so search can rebuild them
+    this.playlistEntriesContainer = this.add.container(0, 0);
+    this.playlistContainer.add(this.playlistEntriesContainer);
+    this._playlistLayout = { panelX, panelY, panelWidth, panelHeight, listStartY, trackSpacing };
+    this._buildPlaylistEntries(this.playlist);
+    
+    // Slide in animation
+    this.playlistContainer.setAlpha(0);
+    this.playlistContainer.setScale(0.95);
+    this.tweens.add({
+      targets: this.playlistContainer,
+      alpha: 1,
+      scale: 1,
+      duration: 300,
+      ease: 'Back.easeOut'
+    });
+  }
+  
+  /** Block 5: (re)build the playlist rows for the given (possibly filtered) tracks. */
+  _buildPlaylistEntries(tracks) {
+    if (!this.playlistEntriesContainer || !this._playlistLayout) return;
+    this.playlistEntriesContainer.removeAll(true);
+    const { panelX, panelY, panelWidth, panelHeight, listStartY, trackSpacing } = this._playlistLayout;
+    
+    if (!tracks.length) {
+      const none = this.add.text(panelX, listStartY + 40, 'No matching tracks', {
+        fontSize: '18px', fontFamily: 'Arial', color: '#ffff00'
+      }).setOrigin(0.5);
+      this.playlistEntriesContainer.add(none);
+      return;
+    }
+    
+    tracks.forEach((track, index) => {
       const trackY = listStartY + (index * trackSpacing);
       
       // Basic vertical overflow check
@@ -2431,7 +2471,7 @@ export default class GameScene extends Phaser.Scene {
       // Track background highlight (larger hit area)
       const trackBg = this.add.rectangle(panelX, trackY, panelWidth - 40, 42, trackBgColor, trackBgAlpha);
       trackBg.setStrokeStyle(isCurrentTrack ? 2 : 1, isCurrentTrack ? 0x00ff00 : 0x444444);
-      this.playlistContainer.add(trackBg);
+      this.playlistEntriesContainer.add(trackBg);
       
       // Now Playing indicator
       let displayText = isCurrentTrack ? '▶ ' : '  ';
@@ -2444,7 +2484,7 @@ export default class GameScene extends Phaser.Scene {
         fontStyle: isCurrentTrack ? 'bold' : 'normal'
       });
       trackText.setOrigin(0, 0.5);
-      this.playlistContainer.add(trackText);
+      this.playlistEntriesContainer.add(trackText);
       
       // Artist name
       const artistText = this.add.text(panelX - panelWidth / 2 + 55, trackY + 11, track.artist, {
@@ -2453,7 +2493,7 @@ export default class GameScene extends Phaser.Scene {
         color: isCurrentTrack ? '#00ff00' : '#888888'
       });
       artistText.setOrigin(0, 0.5);
-      this.playlistContainer.add(artistText);
+      this.playlistEntriesContainer.add(artistText);
       
       // Input handling
       trackBg.setInteractive({ useHandCursor: true });
@@ -2488,22 +2528,64 @@ export default class GameScene extends Phaser.Scene {
         }
       });
     });
+  }
+  
+  /** Block 5: DOM search input for the playlist overlay (canvas-positioned). */
+  _createPlaylistSearchInput() {
+    this._removePlaylistSearchInput();
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.placeholder = '🔎 search tracks…';
+    input.autocomplete = 'off';
+    input.style.position = 'absolute';
+    input.style.zIndex = '1000';
+    input.style.background = 'rgba(0,0,0,0.85)';
+    input.style.border = '2px solid #9d00ff';
+    input.style.borderRadius = '6px';
+    input.style.color = '#ffffff';
+    input.style.fontFamily = 'Arial, sans-serif';
+    input.style.fontSize = '14px';
+    input.style.padding = '2px 8px';
+    input.style.outline = 'none';
+    document.body.appendChild(input);
+    this._playlistSearchEl = input;
     
-    // Slide in animation
-    this.playlistContainer.setAlpha(0);
-    this.playlistContainer.setScale(0.95);
-    this.tweens.add({
-      targets: this.playlistContainer,
-      alpha: 1,
-      scale: 1,
-      duration: 300,
-      ease: 'Back.easeOut'
-    });
+    const applyFilter = () => {
+      const q = input.value;
+      const filtered = search(this.playlist, q, [{ name: 'title', weight: 2 }, { name: 'artist', weight: 1 }]);
+      this._buildPlaylistEntries(filtered);
+    };
+    input.addEventListener('keyup', applyFilter);
+    input.addEventListener('input', applyFilter); // covers the ✕ clear button
+    // Keyboard gameplay input must not steal characters while typing
+    input.addEventListener('keydown', (e) => e.stopPropagation());
+    
+    this._syncPlaylistSearchPosition();
+    setTimeout(() => input.focus(), 50);
+  }
+  
+  _syncPlaylistSearchPosition() {
+    const input = this._playlistSearchEl, anchor = this._playlistSearchAnchor;
+    if (!input || !anchor || !anchor.active || !this.scale?.canvas) return;
+    const canvasBounds = this.scale.canvas.getBoundingClientRect();
+    const b = anchor.getBounds();
+    const sx = canvasBounds.width / this.scale.width;
+    const sy = canvasBounds.height / this.scale.height;
+    input.style.left = `${canvasBounds.left + b.x * sx}px`;
+    input.style.top = `${canvasBounds.top + b.y * sy}px`;
+    input.style.width = `${b.width * sx}px`;
+    input.style.height = `${b.height * sy}px`;
+  }
+  
+  _removePlaylistSearchInput() {
+    if (this._playlistSearchEl) { this._playlistSearchEl.remove(); this._playlistSearchEl = null; }
+    this._playlistSearchAnchor = null;
   }
   
   hidePlaylistDisplay() {
     if (!this.playlistDisplayVisible) return;
     this.playlistDisplayVisible = false;
+    this._removePlaylistSearchInput();
     
     if (this.playlistContainer) {
       this.tweens.add({
@@ -3235,6 +3317,7 @@ celebrateHighScore() {
   
   update() {
     this.updateMarkerPositions();
+    this._syncPlaylistSearchPosition();
   }
 }
 

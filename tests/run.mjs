@@ -6,6 +6,7 @@ import PowerupManager from '../Powerups.js';
 import { search } from '../SearchIndex.js';
 import { scaleSfxVolume } from '../Sfx.js';
 import LeaderboardService, { insertScore, normalizeReplay, ReplayRecorder } from '../LeaderboardService.js';
+import { validateChart, sortNotes, spawnCursor, ChartRecorder } from '../ChartFormat.js';
 
 let pass = 0, fail = 0;
 function t(name, cond, detail = '') {
@@ -150,6 +151,35 @@ console.log('── LeaderboardService (Block 7: pure logic + local guard) ─�
   await LeaderboardService.submitScore({ name: 'NODE', score: 777, enemies: 3 });
   const top = await LeaderboardService.top10();
   t('local submit + top10 roundtrip', top.length === 1 && top[0].score === 777 && top[0].name === 'NODE');
+}
+
+console.log('── ChartFormat (Block 8: authored charts groundwork) ──');
+{
+  const good = { meta: { title: 'T', artist: 'A', bpm: 128, offset: 0.25 }, notes: [[500, 0, 'Q'], [1000, 2, 'P']] };
+  t('valid chart accepted', validateChart(good).ok);
+  t('missing meta rejected', !validateChart({ notes: [] }).ok);
+  t('bad bpm rejected', !validateChart({ meta: { bpm: 0 }, notes: [] }).ok);
+  t('bad lane rejected', !validateChart({ meta: { bpm: 120 }, notes: [[100, 5, 'Q']] }).ok);
+  t('bad time rejected', !validateChart({ meta: { bpm: 120 }, notes: [[-5, 0, 'Q']] }).ok);
+  
+  const unsorted = [[900, 1, 'B'], [100, 0, 'A'], [500, 2, 'C']];
+  t('sortNotes orders by time', sortNotes(unsorted).map(n => n[0]).join(',') === '100,500,900');
+  
+  const notes = [[500, 0, 'Q'], [1000, 1, 'W'], [2000, 2, 'P']];
+  t('spawnCursor: nothing due yet', spawnCursor(notes, 0, 0, 400) === 0);
+  t('spawnCursor: first note due (500-400<=100)', spawnCursor(notes, 0, 100, 400) === 1);
+  t('spawnCursor: two due mid-song', spawnCursor(notes, 0, 700, 400) === 2);
+  t('spawnCursor: resumes from index', spawnCursor(notes, 2, 5000, 400) === 3);
+  
+  const rec = new ChartRecorder({ title: 'rec', bpm: 140 });
+  rec.start();
+  rec.record(880.4, 1, 'W');
+  rec.record(440.2, 0, 'Q');
+  rec.record(-10, 0, 'X'); // rejected
+  const chart = rec.stop();
+  t('recorder rounds + sorts + drops bad times', chart.notes.length === 2 && chart.notes[0][0] === 440 && chart.notes[1][0] === 880);
+  t('recorded chart validates', validateChart(chart).ok);
+  t('recorder keeps meta', chart.meta.bpm === 140 && chart.meta.title === 'rec');
 }
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);

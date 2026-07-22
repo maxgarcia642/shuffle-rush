@@ -11,6 +11,7 @@ import MediaLibrary from './MediaLibrary.js';
 import VideoActor from './VideoActor.js';
 import { search } from './SearchIndex.js';
 import LeaderboardService, { ReplayRecorder } from './LeaderboardService.js';
+import { validateChart, sortNotes, spawnCursor, ChartRecorder } from './ChartFormat.js';
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
@@ -521,6 +522,30 @@ export default class GameScene extends Phaser.Scene {
     this.replayRecorder = new ReplayRecorder(() => this.rhythmSystem.nowMs());
     this.replayRecorder.start();
     
+    // Block 8 (groundwork): chart mode + tap-to-record dev tool.
+    // F9 toggles recording (play a track, tap along); stopping exports the
+    // chart JSON to console + download. window.ShuffleRushChart.load(json)
+    // switches spawning to the authored notes (random generator = default).
+    this.chart = null;
+    this.chartNoteIndex = 0;
+    this.chartRecorder = null;
+    this.input.keyboard?.on('keydown-F9', () => {
+      if (this.chartRecorder?.active) {
+        this.chartRecorder.stop();
+        this.chartRecorder.export();
+        this.showFeedback('CHART EXPORTED (console + download)', 0x00ff99);
+        this.chartRecorder = null;
+      } else {
+        this.chartRecorder = new ChartRecorder({ bpm: this.currentBPM, title: this.currentTrackKey || 'untitled' });
+        this.chartRecorder.start();
+        this.showFeedback('CHART RECORDING — F9 TO EXPORT', 0x00ff99);
+      }
+    });
+    window.ShuffleRushChart = {
+      load: (chart) => this.loadChart(chart),
+      unload: () => { this.chart = null; this.chartNoteIndex = 0; console.log('chart unloaded — random generator active'); }
+    };
+    
     // Music Playlist System - Setup and start music AFTER rhythm system is initialized
     this.setupMusicPlaylist();
     
@@ -566,6 +591,10 @@ export default class GameScene extends Phaser.Scene {
     
     this.beatCount++;
     
+    // Block 8: in chart mode the authored notes[] drive spawning (see
+    // _updateChartSpawns) — the random generator stands down.
+    if (this.chart) return;
+    
     // Dynamic Spawn Logic: vary the gap between beats
     if (this.nextSpawnBeat === undefined) this.nextSpawnBeat = 0;
     
@@ -605,9 +634,20 @@ export default class GameScene extends Phaser.Scene {
         this.streakCount = 1;
     }
     
-    const lane = this.laneConfig[laneIdx];
     this.lastSelectedKey = selectedKey;
     this.lastLaneIdx = laneIdx;
+    this._spawnMarker(laneIdx, selectedKey);
+  }
+  
+  /**
+   * Build one falling marker (extracted so the random generator and chart
+   * mode share the exact same construction — Block 8).
+   * opts.targetTime overrides the default nowMs()+travelTime hit moment.
+   */
+  _spawnMarker(laneIdx, selectedKey, opts = {}) {
+    const { height } = this.scale;
+    const lane = this.laneConfig[laneIdx];
+    if (!lane) return null;
     
     const isFever = this.feverMode;
     const markerColor = isFever ? 0xffffff : lane.color; // White in fever, or lane color
@@ -641,7 +681,7 @@ export default class GameScene extends Phaser.Scene {
     
     const markerData = {
       sprite: markerContainer,
-      targetTime: this.rhythmSystem.nowMs() + travelTime,
+      targetTime: opts.targetTime !== undefined ? opts.targetTime : this.rhythmSystem.nowMs() + travelTime,
       travelTime: travelTime,
       spawnY: height * 0.2,
       targetY: height * 0.85,
@@ -670,6 +710,46 @@ export default class GameScene extends Phaser.Scene {
     }
     // Default path: marker y is driven from conductor time in update() —
     // see updateMarkerPositions(). Miss detection happens there too.
+  }
+  
+  /** Block 8: switch spawning to an authored chart. Returns {ok, reason?}. */
+  loadChart(chart) {
+    const check = validateChart(chart);
+    if (!check.ok) {
+      console.warn('loadChart rejected:', check.reason);
+      this.showFeedback('CHART INVALID: ' + check.reason, 0xff0000);
+      return check;
+    }
+    this.chart = { meta: { ...chart.meta }, notes: sortNotes(chart.notes) };
+    this.chartNoteIndex = 0;
+    this._chartClockStart = this.rhythmSystem.nowMs();
+    this.updateSystemBPM(Number(chart.meta.bpm));
+    console.log(`✓ Chart loaded: ${chart.meta.title || 'untitled'} — ${this.chart.notes.length} notes @ ${chart.meta.bpm} BPM`);
+    this.showFeedback('CHART MODE', 0x00ff99);
+    return { ok: true };
+  }
+  
+  /** Block 8: spawn authored notes travelTime ahead of their hit moment. */
+  _updateChartSpawns() {
+    if (!this.chart || this.isPaused || this.isDying) return;
+    const notes = this.chart.notes;
+    if (this.chartNoteIndex >= notes.length) return;
+    // Song clock: bound track position when playing, else time since load.
+    const bound = this.currentTrack && this.currentTrack.isPlaying;
+    const songPos = bound
+      ? this.rhythmSystem.songPositionMs()
+      : this.rhythmSystem.nowMs() - this._chartClockStart;
+    const speedMultiplier = this.isMobile ? 1.4 : 2.0;
+    const travelTime = this.rhythmSystem.beatInterval * speedMultiplier * (this.powerups ? this.powerups.travelScale() : 1);
+    const nextIdx = spawnCursor(notes, this.chartNoteIndex, songPos, travelTime);
+    for (let i = this.chartNoteIndex; i < nextIdx; i++) {
+      const [timeMs, lane, key] = notes[i];
+      // Hit moment on the judgment clock = now + however long until the song
+      // clock reaches the note (late notes clamp to a minimum fall).
+      const untilHit = Math.max(50, timeMs - songPos);
+      this._spawnMarker(lane, key, { targetTime: this.rhythmSystem.nowMs() + untilHit });
+    }
+    this.chartNoteIndex = nextIdx;
   }
   
   /**
@@ -780,6 +860,10 @@ export default class GameScene extends Phaser.Scene {
       // Block 7: feed the ghost-replay recorder (judgment on the audio clock)
       const hitLaneIdx = this.laneConfig.findIndex(l => l.x === closestMarker.laneX);
       this.replayRecorder?.record(hitLaneIdx, feedback === 'PERFECT!' ? 'perfect' : feedback === 'GOOD!' ? 'good' : 'ok');
+      // Block 8: tap-to-record dev tool — times on the song clock
+      if (this.chartRecorder?.active) {
+        this.chartRecorder.record(this.rhythmSystem.songPositionMs(), hitLaneIdx, closestMarker.requiredKey);
+      }
       
       // Check for new high score during gameplay
       const currentHighScore = parseInt(localStorage.getItem('shuffleRushHighScore') || '0');
@@ -3340,6 +3424,7 @@ celebrateHighScore() {
   
   update() {
     this.updateMarkerPositions();
+    this._updateChartSpawns();
     this._syncPlaylistSearchPosition();
   }
 }

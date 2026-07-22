@@ -188,19 +188,16 @@ export default class GameScene extends Phaser.Scene {
         this.sound.stopAll();
     });
     
-    // Y2K RAVE MAXIMALIST PALETTE
-    this.neonColors = [
-      0xff00ff, // Magenta
-      0x00ffff, // Cyan
-      0xccff00, // Lime
-      0xff3300, // Neon Red/Orange
-      0x9d00ff, // Purple
-      0xffffff  // White
-    ];
+    // Y2K RAVE MAXIMALIST PALETTE — Block 4: theme-driven. The theme must be
+    // live BEFORE any effect generator runs, since they all sample neonColors
+    // (or theme fields) at creation time.
+    ThemeManager.init(this.registry);
+    const theme = ThemeManager.current;
+    this.neonColors = theme.neon.slice();
     this.currentColorIndex = 0;
     
-    // 1. BLACK VOID BACKGROUND
-    this.add.rectangle(width / 2, height / 2, width, height, 0x000000).setDepth(-100);
+    // 1. VOID BACKGROUND (themed; neonRush = near-black, shipped feel)
+    this.add.rectangle(width / 2, height / 2, width, height, theme.bgBottom).setDepth(-100);
     
     // 2. HALFTONE DOT GRID
     this.createHalftoneGrid();
@@ -211,8 +208,8 @@ export default class GameScene extends Phaser.Scene {
     // 4. GEOMETRIC CHAOS (Arrows, Triangles)
     this.createGeometricChaos();
     
-    // Center glow (keeping for depth but tweaking)
-    this.centerGlow = this.add.circle(width / 2, height / 2, width * 0.4, 0xff00ff, 0.1);
+    // Center glow (keeping for depth but tweaking) — themed (neonRush glow = the old magenta)
+    this.centerGlow = this.add.circle(width / 2, height / 2, width * 0.4, theme.glow, 0.1);
     this.centerGlow.setBlendMode(Phaser.BlendModes.ADD);
     this.centerGlow.setDepth(-10);
     
@@ -233,8 +230,7 @@ export default class GameScene extends Phaser.Scene {
     
     // Simple rhythm system - 120 BPM (Initialize BEFORE particle effects that use it)
     this.rhythmSystem = new RhythmSystem(this, 120);
-    // ── v2 systems: theme, juice, powerups, video layers ──
-    ThemeManager.init(this.registry);
+    // ── v2 systems: juice, powerups, video layers (theme initialized above) ──
     this.juice = new Juice(this);
     this.juice.startFloaters();
     this.powerups = new PowerupManager(this, {
@@ -1201,9 +1197,10 @@ export default class GameScene extends Phaser.Scene {
     const spacing = 40;
     this.halftoneDots = [];
     
+    const dotColor = ThemeManager.current.halftone ?? 0x333333; // Block 4
     for (let x = 0; x < width + spacing; x += spacing) {
       for (let y = 0; y < height + spacing; y += spacing) {
-        const dot = this.add.circle(x, y, 2, 0x333333);
+        const dot = this.add.circle(x, y, 2, dotColor);
         dot.setDepth(-90);
         dot.originalX = x;
         dot.originalY = y;
@@ -1419,7 +1416,8 @@ export default class GameScene extends Phaser.Scene {
       );
       beatCircle.setScale(Phaser.Math.FloatBetween(0.02, 0.05));
       beatCircle.setAlpha(Phaser.Math.FloatBetween(0.1, 0.25));
-      beatCircle.setTint(Phaser.Math.Between(0, 1) ? 0xff0066 : 0x00ffff);
+      // Block 4: themed tint (neonRush lanes[0]/beam ≈ the old pink/cyan pair)
+      beatCircle.setTint(Phaser.Math.Between(0, 1) ? ThemeManager.current.lanes[0] : ThemeManager.current.beam);
       beatCircle.setBlendMode(Phaser.BlendModes.ADD);
       beatCircle.setDepth(-1);
       
@@ -1745,9 +1743,11 @@ export default class GameScene extends Phaser.Scene {
             yoyo: true
         });
         
-        // Color cycle bars based on position
-        const hue = (this.time.now * 0.05 + index * 10) % 360;
-        const color = Phaser.Display.Color.HSVToRGB(hue / 360, 1, 1).color;
+        // Block 4: cycle bars through the THEME palette (was a raw HSV rainbow
+        // that ignored the theme entirely). Same motion, themed colors.
+        const palette = ThemeManager.current.neon;
+        const step = Math.floor(this.time.now / 400);
+        const color = palette[(step + index) % palette.length];
         bar.setFillStyle(color, bar.alpha);
     });
   }

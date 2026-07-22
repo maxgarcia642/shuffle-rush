@@ -2014,10 +2014,15 @@ export default class GameScene extends Phaser.Scene {
         this.currentTrack = this.sound.add(track.key, { volume: this.registry.get('musicVol') ?? 0.4 });
         
         // AUTO BPM DETECTION
+        // Block 2: the cache stores the FULL grid {bpm, offset} — replays must
+        // re-align the beat grid, not just the tempo, or beats drift off the
+        // track's own first-beat offset on every replay after the first.
+        let cachedGrid = null;
         if (this.detectedBPMs.has(track.key)) {
-            const cachedBPM = this.detectedBPMs.get(track.key);
-            console.log(`ℹ️ Using cached BPM for ${track.key}: ${cachedBPM}`);
-            this.updateSystemBPM(cachedBPM);
+            cachedGrid = this.detectedBPMs.get(track.key);
+            if (typeof cachedGrid === 'number') cachedGrid = { bpm: cachedGrid, offset: 0 }; // legacy shape
+            console.log(`ℹ️ Using cached grid for ${track.key}: ${cachedGrid.bpm} BPM, offset ${cachedGrid.offset}s`);
+            this.updateSystemBPM(cachedGrid.bpm);
         } else {
             // Get the actual AudioBuffer for analysis
             // In Phaser 3 WebAudio, it's accessible via the sound instance
@@ -2029,7 +2034,7 @@ export default class GameScene extends Phaser.Scene {
                 // Use a slight delay to allow the UI to update if needed
                 this.time.delayedCall(100, async () => {
                     const grid = await BeatDetector.detectBeatGrid(audioBuffer);
-                    this.detectedBPMs.set(track.key, grid.bpm);
+                    this.detectedBPMs.set(track.key, { bpm: grid.bpm, offset: grid.offset });
                     this.updateSystemBPM(grid.bpm);
                     // Align the beat grid to the track's own first-beat offset
                     this.rhythmSystem.syncToPhaserSound(this.currentTrack, grid.offset);
@@ -2038,6 +2043,11 @@ export default class GameScene extends Phaser.Scene {
         }
 
         this.currentTrack.play();
+        // Cached-grid path: sync AFTER play() so syncToPhaserSound sees the
+        // live sound (it reads sound.seek/isPlaying for mid-song alignment).
+        if (cachedGrid) {
+            this.rhythmSystem.syncToPhaserSound(this.currentTrack, cachedGrid.offset);
+        }
         
         // When track ends, play another one
         this.currentTrack.once('complete', () => {

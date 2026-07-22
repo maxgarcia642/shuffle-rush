@@ -3,57 +3,61 @@ import MenuScene from './MenuScene.js';
 import GameScene from './GameScene.js';
 import CreditsScene from './CreditsScene.js';
 import ImageUploadScene from './ImageUploadScene.js';
+import SettingsScene from './SettingsScene.js';
 import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
+import MediaLibrary, { base64ToBlob } from './MediaLibrary.js';
+import ThemeManager from './ThemeManager.js';
+import { installSfxRouting } from './Sfx.js';
 
-// Storage Helper to handle compression for large data
+/**
+ * SHUFFLE RUSH v2 boot.
+ * WHAT CHANGED (and what deliberately didn't):
+ * - The Phaser REGISTRY CONTRACT is untouched — every scene still reads/writes
+ *   customDancers / customTracks / customImageData / customAudioData /
+ *   customAnimations / builtInAssetsEnabled / builtInMusicEnabled exactly as
+ *   before. Zero scene-side persistence changes required.
+ * - PERSISTENCE moved from localStorage (5–10MB quota → the "lost on refresh"
+ *   bug) to IndexedDB via MediaLibrary. Legacy localStorage data migrates
+ *   once, automatically. localStorage keeps only small metadata as a cache.
+ * - New registry keys: customVideos, videoBgEnabled, videoBgSound,
+ *   videoOpponentEnabled, themeId, juiceOn, particleDensity, latencyOffsetMs,
+ *   musicVol, sfxVol — persisted through the same bridge.
+ * - Boot is async (top-level await, valid in this ESM/import-map build): IDB
+ *   opens and hydrates BEFORE Phaser boots, so preBoot stays synchronous.
+ */
+
+// Legacy storage helper — retained as the MIGRATION SOURCE and small-metadata
+// cache. Big payloads no longer go through here (that was the quota bug).
 window.ShuffleRushStorage = {
-    _failedKeys: new Set(), // Track keys that are too large to avoid repeated attempts
+    _failedKeys: new Set(),
     set(key, value) {
-        // Skip if this key previously failed due to size
-        if (this._failedKeys.has(key)) {
-            return false;
-        }
+        if (this._failedKeys.has(key)) return false;
         try {
             const stringValue = JSON.stringify(value);
-            
-            // Only compress if the string is large (> 100KB) to save CPU
             if (stringValue.length > 100000) {
                 const compressed = LZString.compressToUTF16(stringValue);
                 localStorage.setItem(key + '_lz', compressed);
-                localStorage.removeItem(key); // Cleanup old uncompressed data
+                localStorage.removeItem(key);
             } else {
                 localStorage.setItem(key, stringValue);
-                localStorage.removeItem(key + '_lz'); // Cleanup old compressed data
+                localStorage.removeItem(key + '_lz');
             }
             return true;
         } catch (e) {
-            // Handle quota errors gracefully without throwing
             if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-                console.warn(`⚠️ Storage quota exceeded for ${key} - continuing without persistence`);
-                this._failedKeys.add(key); // Don't try again
+                console.warn(`⚠️ Storage quota exceeded for ${key} - continuing without localStorage cache`);
+                this._failedKeys.add(key);
                 return false;
             }
-            // Handle RangeError from too many properties
-            if (e.name === 'RangeError' && e.message && e.message.includes('Too many properties')) {
-                console.warn(`⚠️ Data structure too large for ${key} - continuing without persistence`);
-                this._failedKeys.add(key); // Don't try again
-                return false;
-            }
-            // For other errors, log and return false instead of throwing
             console.error(`Failed to save ${key}:`, e.message || e);
-            this._failedKeys.add(key); // Don't try again
+            this._failedKeys.add(key);
             return false;
         }
     },
     get(key) {
         try {
-            // Check for compressed version first
             const compressed = localStorage.getItem(key + '_lz');
-            if (compressed) {
-                const decompressed = LZString.decompressFromUTF16(compressed);
-                return JSON.parse(decompressed);
-            }
-            // Fallback to uncompressed
+            if (compressed) return JSON.parse(LZString.decompressFromUTF16(compressed));
             const uncompressed = localStorage.getItem(key);
             return uncompressed ? JSON.parse(uncompressed) : null;
         } catch (e) {
@@ -62,8 +66,54 @@ window.ShuffleRushStorage = {
         }
     }
 };
-
 const Storage = window.ShuffleRushStorage;
+
+// ── Async hydrate BEFORE Phaser boots ────────────────────────────────────────
+console.log('=== SHUFFLE RUSH v2: Opening MediaLibrary (IndexedDB) ===');
+await MediaLibrary.open();
+await MediaLibrary.migrateFromLocalStorage(Storage);
+
+async function hydrate() {
+    const boot = {};
+    // Small metadata: IDB kv first, legacy localStorage fallback.
+    boot.customTracks = (await MediaLibrary.getKV('shuffleRushCustomTracks'))
+        || Storage.get('shuffleRushCustomTracks') || [];
+    boot.customDancers = (await MediaLibrary.getKV('shuffleRushCustomDancers'))
+        || Storage.get('shuffleRushCustomDancers') || [];
+    boot.customAnimations = (await MediaLibrary.getKV('customAnimations'))
+        || Storage.get('shuffleRushCustomAnimations') || {};
+    boot.customVideos = (await MediaLibrary.getKV('customVideos')) || [];
+    // Big payloads: rebuild the base64 maps scenes expect, from stored blobs.
+    const blobKeys = await MediaLibrary.listBlobKeys();
+    const audioKeys = blobKeys.filter(k => String(k).startsWith('audio:')).map(k => String(k).slice(6));
+    const imageKeys = blobKeys.filter(k => String(k).startsWith('image:')).map(k => String(k).slice(6));
+    boot.customAudioData = await MediaLibrary.readBase64Map('audio:', audioKeys);
+    boot.customImageData = await MediaLibrary.readBase64Map('image:', imageKeys);
+    // Legacy fallback if IDB was empty but localStorage still has data.
+    if (!Object.keys(boot.customAudioData).length) {
+        boot.customAudioData = Storage.get('shuffleRushCustomAudioData') || {};
+    }
+    if (!Object.keys(boot.customImageData).length) {
+        boot.customImageData = Storage.get('shuffleRushCustomImageData') || {};
+    }
+    // Flags + settings.
+    const b1 = await MediaLibrary.getKV('builtInAssetsEnabled');
+    boot.builtInAssetsEnabled = b1 !== null ? b1 : (Storage.get('shuffleRushBuiltInAssetsEnabled') ?? true);
+    const b2 = await MediaLibrary.getKV('builtInMusicEnabled');
+    boot.builtInMusicEnabled = b2 !== null ? b2 : (Storage.get('shuffleRushBuiltInMusicEnabled') ?? true);
+    boot.settings = (await MediaLibrary.getKV('settings')) || {};
+    return boot;
+}
+const BOOT = await hydrate();
+console.log(`✓ Hydrated: ${BOOT.customTracks.length} tracks, ${BOOT.customDancers.length} dancers, ` +
+    `${Object.keys(BOOT.customAudioData).length} audio blobs, ${Object.keys(BOOT.customImageData).length} image blobs, ` +
+    `${BOOT.customVideos.length} videos`);
+
+const SETTINGS_DEFAULTS = {
+    themeId: 'neonRush', juiceOn: true, particleDensity: 1, latencyOffsetMs: 0,
+    musicVol: 0.4, sfxVol: 0.5, videoBgEnabled: false, videoBgSound: false, videoOpponentEnabled: false,
+    selectedVideoKey: null // Block 3: Dancer Lab video gallery selection
+};
 
 const config = {
   type: Phaser.AUTO,
@@ -76,167 +126,109 @@ const config = {
   },
   physics: {
     default: 'arcade',
-    arcade: {
-      gravity: { y: 0 },
-      debug: false
-    }
+    arcade: { gravity: { y: 0 }, debug: false }
   },
-  scene: [MenuScene, GameScene, CreditsScene, ImageUploadScene],
+  scene: [MenuScene, GameScene, CreditsScene, ImageUploadScene, SettingsScene],
   callbacks: {
     preBoot: (game) => {
-      // Load persistent data from localStorage into registry before any scene boots
-      console.log('=== SHUFFLE RUSH: Loading Persistent Data ===');
-      
-      // Load custom dancers
-      const dancers = Storage.get('shuffleRushCustomDancers');
-      if (dancers) {
-        game.registry.set('customDancers', dancers);
-        console.log('✓ Loaded', dancers.length, 'custom dancers');
-      } else {
-        game.registry.set('customDancers', []);
-        console.log('✓ Initialized empty custom dancers array');
+      console.log('=== SHUFFLE RUSH v2: Seeding registry ===');
+      game.registry.set('customDancers', BOOT.customDancers);
+      game.registry.set('customTracks', BOOT.customTracks);
+      game.registry.set('customImageData', BOOT.customImageData);
+      game.registry.set('customAudioData', BOOT.customAudioData);
+      game.registry.set('customAnimations', BOOT.customAnimations);
+      game.registry.set('customVideos', BOOT.customVideos);
+      game.registry.set('builtInAssetsEnabled', BOOT.builtInAssetsEnabled);
+      game.registry.set('builtInMusicEnabled', BOOT.builtInMusicEnabled);
+      for (const [k, def] of Object.entries(SETTINGS_DEFAULTS)) {
+        game.registry.set(k, BOOT.settings[k] !== undefined ? BOOT.settings[k] : def);
       }
-      
-      // Load custom tracks
-      const tracks = Storage.get('shuffleRushCustomTracks');
-      if (tracks) {
-        game.registry.set('customTracks', tracks);
-        console.log('✓ Loaded', tracks.length, 'custom tracks');
-      } else {
-        game.registry.set('customTracks', []);
-        console.log('✓ Initialized empty custom tracks array');
-      }
-      
-      // Load custom image data (base64)
-      const imageData = Storage.get('shuffleRushCustomImageData');
-      if (imageData) {
-        game.registry.set('customImageData', imageData);
-        console.log('✓ Loaded', Object.keys(imageData).length, 'custom image data entries');
-      } else {
-        game.registry.set('customImageData', {});
-        console.log('✓ Initialized empty custom image data');
-      }
-      
-      // Load custom audio data (base64)
-      const audioData = Storage.get('shuffleRushCustomAudioData');
-      if (audioData) {
-        game.registry.set('customAudioData', audioData);
-        console.log('✓ Loaded', Object.keys(audioData).length, 'custom audio data entries');
-      } else {
-        game.registry.set('customAudioData', {});
-        console.log('✓ Initialized empty custom audio data');
-      }
-      
-      // Load custom animations metadata (for GIFs)
-      const animations = Storage.get('shuffleRushCustomAnimations');
-      if (animations) {
-        game.registry.set('customAnimations', animations);
-        console.log('✓ Loaded', Object.keys(animations).length, 'custom animation entries');
-      } else {
-        game.registry.set('customAnimations', {});
-        console.log('✓ Initialized empty custom animations');
-      }
-      
-      // Load built-in image assets enabled state (defaults to true)
-      const builtInEnabled = Storage.get('shuffleRushBuiltInAssetsEnabled');
-      if (builtInEnabled !== null) {
-        game.registry.set('builtInAssetsEnabled', builtInEnabled);
-        console.log('✓ Loaded built-in image assets state:', builtInEnabled);
-      } else {
-        game.registry.set('builtInAssetsEnabled', true);
-        console.log('✓ Initialized built-in image assets state: enabled');
-      }
-      
-      // Load built-in music enabled state (defaults to true)
-      const builtInMusicEnabled = Storage.get('shuffleRushBuiltInMusicEnabled');
-      if (builtInMusicEnabled !== null) {
-        game.registry.set('builtInMusicEnabled', builtInMusicEnabled);
-        console.log('✓ Loaded built-in music assets state:', builtInMusicEnabled);
-      } else {
-        game.registry.set('builtInMusicEnabled', true);
-        console.log('✓ Initialized built-in music assets state: enabled');
-      }
-      
-      console.log('=== Persistent Data Loaded Successfully ===');
+      ThemeManager.init(game.registry);
+      console.log('=== Registry ready (theme:', ThemeManager.currentId + ') ===');
+    },
+    postBoot: (game) => {
+      // Block 6: every scene's this.sound.play(key, {volume}) SFX call is
+      // scaled by the sfxVol setting (music uses sound.add — unaffected).
+      installSfxRouting(game);
     }
   }
 };
 
 const game = new Phaser.Game(config);
 
-// Set up registry listeners to auto-save when data changes
-game.registry.events.on('changedata-customDancers', (parent, value) => {
-  try {
-    const success = Storage.set('shuffleRushCustomDancers', value);
-    if (success) {
-      console.log('✓ Auto-saved custom dancers');
-    }
-  } catch (e) {
-    console.error('Failed to save custom dancers:', e);
-  }
-});
+// ── Write-through persistence: registry → IndexedDB (+ small localStorage cache)
+const persistedBlobs = new Set((await MediaLibrary.listBlobKeys()).map(String));
 
-game.registry.events.on('changedata-customTracks', (parent, value) => {
-  try {
-    const success = Storage.set('shuffleRushCustomTracks', value);
-    if (success) {
-      console.log('✓ Auto-saved custom tracks');
-    }
-  } catch (e) {
-    console.error('Failed to save custom tracks:', e);
-  }
-});
+// Per-prefix serialization: registry.set fires once per uploaded file, and an
+// earlier (smaller) sync overlapping a later one could delete blobs the later
+// invocation just added. Each queued run reads the registry FRESH so it always
+// syncs against the latest map.
+const blobSyncChains = new Map();
+function queueBlobSync(prefix, registryKey, mimeFallback) {
+    const prev = blobSyncChains.get(prefix) || Promise.resolve();
+    const next = prev.then(
+        () => syncBlobMap(prefix, game.registry.get(registryKey), mimeFallback)
+    ).catch(e => console.error('blob sync failed for', prefix, e));
+    blobSyncChains.set(prefix, next);
+}
 
-game.registry.events.on('changedata-customImageData', (parent, value) => {
-  try {
-    const success = Storage.set('shuffleRushCustomImageData', value);
-    if (success) {
-      console.log('✓ Auto-saved custom image data');
+async function syncBlobMap(prefix, map, mimeFallback) {
+    const wanted = new Set(Object.keys(map || {}).map(k => prefix + k));
+    for (const k of Object.keys(map || {})) {
+        const full = prefix + k;
+        if (!persistedBlobs.has(full)) {
+            try {
+                const ok = await MediaLibrary.putBlob(full, base64ToBlob(map[k], mimeFallback));
+                if (ok) { persistedBlobs.add(full); console.log('✓ IDB stored', full); }
+            } catch (e) { console.error('IDB store failed', full, e); }
+        }
     }
-  } catch (e) {
-    console.error('Failed to save custom image data:', e);
-  }
-});
-
-game.registry.events.on('changedata-customAudioData', (parent, value) => {
-  try {
-    const success = Storage.set('shuffleRushCustomAudioData', value);
-    if (success) {
-      console.log('✓ Auto-saved custom audio data');
+    for (const full of [...persistedBlobs]) {
+        if (full.startsWith(prefix) && !wanted.has(full)) {
+            await MediaLibrary.deleteBlob(full);
+            persistedBlobs.delete(full);
+            console.log('✓ IDB removed', full);
+        }
     }
-    // If not successful, Storage.set already logged the warning
-  } catch (e) {
-    console.error('Failed to save custom audio data:', e);
-  }
-});
+}
 
-game.registry.events.on('changedata-customAnimations', (parent, value) => {
-  try {
-    const success = Storage.set('shuffleRushCustomAnimations', value);
-    if (success) {
-      console.log('✓ Auto-saved custom animations');
-    }
-    // If not successful, Storage.set already logged the warning
-  } catch (e) {
-    console.error('Failed to save custom animations:', e);
-  }
+game.registry.events.on('changedata-customDancers', (p, value) => {
+    MediaLibrary.setKV('shuffleRushCustomDancers', value);
+    Storage.set('shuffleRushCustomDancers', value);
 });
-
-game.registry.events.on('changedata-builtInAssetsEnabled', (parent, value) => {
-  try {
+game.registry.events.on('changedata-customTracks', (p, value) => {
+    MediaLibrary.setKV('shuffleRushCustomTracks', value);
+    Storage.set('shuffleRushCustomTracks', value);
+});
+game.registry.events.on('changedata-customImageData', () => {
+    queueBlobSync('image:', 'customImageData', 'image/png');
+});
+game.registry.events.on('changedata-customAudioData', () => {
+    queueBlobSync('audio:', 'customAudioData', 'audio/mpeg');
+});
+game.registry.events.on('changedata-customAnimations', (p, value) => {
+    MediaLibrary.setKV('customAnimations', value);
+});
+game.registry.events.on('changedata-customVideos', (p, value) => {
+    MediaLibrary.setKV('customVideos', value);
+});
+game.registry.events.on('changedata-builtInAssetsEnabled', (p, value) => {
+    MediaLibrary.setKV('builtInAssetsEnabled', value);
     Storage.set('shuffleRushBuiltInAssetsEnabled', value);
-    console.log('✓ Auto-saved built-in image assets state');
-  } catch (e) {
-    console.error('Failed to save built-in image assets state:', e);
-  }
 });
-
-game.registry.events.on('changedata-builtInMusicEnabled', (parent, value) => {
-  try {
+game.registry.events.on('changedata-builtInMusicEnabled', (p, value) => {
+    MediaLibrary.setKV('builtInMusicEnabled', value);
     Storage.set('shuffleRushBuiltInMusicEnabled', value);
-    console.log('✓ Auto-saved built-in music assets state');
-  } catch (e) {
-    console.error('Failed to save built-in music assets state:', e);
-  }
 });
-
+// Settings bundle — one kv record, updated on any settings key change.
+for (const key of Object.keys(SETTINGS_DEFAULTS)) {
+    game.registry.events.on('changedata-' + key, async () => {
+        const bundle = {};
+        for (const k of Object.keys(SETTINGS_DEFAULTS)) bundle[k] = game.registry.get(k);
+        await MediaLibrary.setKV('settings', bundle);
+    });
+}
+// Dev/test convenience: lets the browser console (and automated checks)
+// inspect the registry and scenes. No gameplay code reads this.
+window.ShuffleRushGame = game;
+console.log('=== SHUFFLE RUSH v2 boot complete ===');

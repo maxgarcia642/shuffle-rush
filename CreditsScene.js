@@ -1,6 +1,7 @@
 
 
 import Phaser from 'phaser';
+import ThemeManager from './ThemeManager.js';
 
 export default class CreditsScene extends Phaser.Scene {
   constructor() {
@@ -8,18 +9,14 @@ export default class CreditsScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.audio('menu-click', 'https://rosebud.ai/assets/Menu Click by Leszek_Szary of freesound_community.mp3?cDI3');
+    this.load.audio('menu-click', 'assets/menu-click-by-leszek_szary-of-freesound_community.mp3');
   }
   create() {
     const { width, height } = this.scale;
     // Dynamic color-changing background (Vibrant like Menu!)
-    this.colors = [
-      { main: 0xff0066, dark: 0x990044 }, // Hot Pink
-      { main: 0x00ff99, dark: 0x009966 }, // Electric Green
-      { main: 0xff9900, dark: 0xcc6600 }, // Vibrant Orange
-      { main: 0x0099ff, dark: 0x0066cc }, // Electric Blue
-      { main: 0xff00ff, dark: 0x990099 }  // Magenta
-    ];
+    // Block 4: themed palette (neonRush.menuColors = the shipped set).
+    ThemeManager.init(this.registry);
+    this.colors = ThemeManager.current.menuColors.map(c => ({ ...c }));
     this.currentColorIndex = 0;
     this.bgGraphics = this.add.graphics();
     this.updateBackground();

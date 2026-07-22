@@ -1,8 +1,17 @@
 import Phaser from 'phaser';
 import RhythmSystem from './RhythmSystem.js';
+import { ConductorMath } from './Conductor.js';
 import Player from './Player.js';
 import Enemy from './Enemy.js';
 import BeatDetector from './BeatDetector.js';
+import ThemeManager from './ThemeManager.js';
+import Juice from './Juice.js';
+import PowerupManager from './Powerups.js';
+import MediaLibrary from './MediaLibrary.js';
+import VideoActor from './VideoActor.js';
+import { search } from './SearchIndex.js';
+import LeaderboardService, { ReplayRecorder } from './LeaderboardService.js';
+import { validateChart, sortNotes, spawnCursor, ChartRecorder } from './ChartFormat.js';
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
@@ -99,62 +108,62 @@ export default class GameScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('gradient-bg', 'https://rosebud.ai/assets/gradientBackground.png?wb04');
-    this.load.image('dancer-1', 'https://rosebud.ai/assets/ipod_1.png?Ev5j');
-    this.load.image('dancer-3', 'https://rosebud.ai/assets/3416ffd35c26a1752542c0bc288ff84f.png?Eg0q');
+    this.load.image('gradient-bg', 'assets/gradientbackground.png');
+    this.load.image('dancer-1', 'assets/ipod_1.png');
+    this.load.image('dancer-3', 'assets/3416ffd35c26a1752542c0bc288ff84f.png');
     // dancer-5 removed
     // dancer-6 removed
     // dancer-7 removed
-    this.load.image('dancer-8', 'https://rosebud.ai/assets/48e6419460e1089bfbbf469f66d5b857.png?6LnL');
-    this.load.image('dancer-9', 'https://rosebud.ai/assets/openart-image_5h9r7RHC_1766769844463_raw.png?mBoh');
-    this.load.image('dancer-11', 'https://rosebud.ai/assets/openart-image_Cj7r3IF8_1766772364490_raw.png?0YIj');
-    this.load.image('dancer-12', 'https://rosebud.ai/assets/openart-image_eC_NokeU_1766772858600_raw.png?1B6r');
-    this.load.image('dancer-13', 'https://rosebud.ai/assets/openart-image_bOVZ_q4e_1766769708364_raw.png?JTXh');
-    this.load.image('dancer-14', 'https://rosebud.ai/assets/openart-image_ej6hcmYK_1766773004301_raw.png?XBXq');
+    this.load.image('dancer-8', 'assets/48e6419460e1089bfbbf469f66d5b857.png');
+    this.load.image('dancer-9', 'assets/openart-image_5h9r7rhc_1766769844463_raw.png');
+    this.load.image('dancer-11', 'assets/openart-image_cj7r3if8_1766772364490_raw.png');
+    this.load.image('dancer-12', 'assets/openart-image_ec_nokeu_1766772858600_raw.png');
+    this.load.image('dancer-13', 'assets/openart-image_bovz_q4e_1766769708364_raw.png');
+    this.load.image('dancer-14', 'assets/openart-image_ej6hcmyk_1766773004301_raw.png');
     // dancer-15 removed
-    this.load.image('dancer-16', 'https://rosebud.ai/assets/openart-image_L0o4fC_g_1766769308945_raw.png?qTri');
-    this.load.image('dancer-17', 'https://rosebud.ai/assets/openart-image_fN9NwtaK_1766769352930_raw.png?YwNB');
-    this.load.image('dancer-18', 'https://rosebud.ai/assets/openart-image_NhN1g02R_1766769862487_raw.png?uDSp');
-    this.load.image('dancer-19', 'https://rosebud.ai/assets/openart-image_NAjwcTbH_1766769722191_raw.png?wrmV');
-    this.load.image('dancer-20', 'https://rosebud.ai/assets/openart-image_N16K-OfJ_1766769295833_raw.png?sGUk');
+    this.load.image('dancer-16', 'assets/openart-image_l0o4fc_g_1766769308945_raw.png');
+    this.load.image('dancer-17', 'assets/openart-image_fn9nwtak_1766769352930_raw.png');
+    this.load.image('dancer-18', 'assets/openart-image_nhn1g02r_1766769862487_raw.png');
+    this.load.image('dancer-19', 'assets/openart-image_najwctbh_1766769722191_raw.png');
+    this.load.image('dancer-20', 'assets/openart-image_n16k-ofj_1766769295833_raw.png');
     // dancer-21 removed
-    this.load.image('dancer-22', 'https://rosebud.ai/assets/openart-image_oa5yTAi5_1766772352539_raw.png?IYcu');
+    this.load.image('dancer-22', 'assets/openart-image_oa5ytai5_1766772352539_raw.png');
     // dancer-23 removed
     // dancer-24 removed
-    this.load.image('dancer-25', 'https://rosebud.ai/assets/openart-image_VrPRs7pd_1766769720970_raw.png?W5Ur');
+    this.load.image('dancer-25', 'assets/openart-image_vrprs7pd_1766769720970_raw.png');
     // dancer-26 removed
     // dancer-27 removed
-    this.load.image('dancer-29', 'https://rosebud.ai/assets/openart-image_1_AKYK0s_1766769096571_raw.png?Sunk');
-    this.load.image('dancer-30', 'https://rosebud.ai/assets/e868c390b62d4df3bb1bdd17395fe41e.png?H2PC');
-    this.load.image('dancer-32', 'https://rosebud.ai/assets/metro girl.png?t5OE');
-    this.load.image('dancer-33', 'https://rosebud.ai/assets/openart-image_k-Mxai4w_1766769199781_raw.png?7hrz');
-    this.load.image('dancer-34', 'https://rosebud.ai/assets/openart-image_S1Am0XLb_1766769052493_raw.png?wSCB');
-    this.load.image('dancer-35', 'https://rosebud.ai/assets/openart-image_vRQgO9cG_1766768971563_raw.png?O3Mx');
-    this.load.image('dancer-36', 'https://rosebud.ai/assets/openart-image_zAZyPC3U_1766768967253_raw.png?AFXg');
-    this.load.image('dancer-37', 'https://rosebud.ai/assets/1ef1da67fdd7c4342f74ffd5dcee1c4c (1).png?iT5f');
-    this.load.image('dancer-38', 'https://rosebud.ai/assets/openart-image_C28fK6GG_1766802182766_raw.png?uOiT');
-    this.load.image('dancer-39', 'https://rosebud.ai/assets/openart-image_L2S8R2Yu_1766801528984_raw.png?B8K5');
-    this.load.image('dancer-40', 'https://rosebud.ai/assets/openart-image_qM4ezQai_1766803187306_raw.png?B71T');
-    this.load.image('attack-burst', 'https://rosebud.ai/assets/hitEffectBurst.png?FQqz');
-    this.load.image('beat-circle', 'https://rosebud.ai/assets/beatCircleUI.png?MECs');
+    this.load.image('dancer-29', 'assets/openart-image_1_akyk0s_1766769096571_raw.png');
+    this.load.image('dancer-30', 'assets/e868c390b62d4df3bb1bdd17395fe41e.png');
+    this.load.image('dancer-32', 'assets/metro-girl.png');
+    this.load.image('dancer-33', 'assets/openart-image_k-mxai4w_1766769199781_raw.png');
+    this.load.image('dancer-34', 'assets/openart-image_s1am0xlb_1766769052493_raw.png');
+    this.load.image('dancer-35', 'assets/openart-image_vrqgo9cg_1766768971563_raw.png');
+    this.load.image('dancer-36', 'assets/openart-image_zazypc3u_1766768967253_raw.png');
+    this.load.image('dancer-37', 'assets/1ef1da67fdd7c4342f74ffd5dcee1c4c-1.png');
+    this.load.image('dancer-38', 'assets/openart-image_c28fk6gg_1766802182766_raw.png');
+    this.load.image('dancer-39', 'assets/openart-image_l2s8r2yu_1766801528984_raw.png');
+    this.load.image('dancer-40', 'assets/openart-image_qm4ezqai_1766803187306_raw.png');
+    this.load.image('attack-burst', 'assets/hiteffectburst.png');
+    this.load.image('beat-circle', 'assets/beatcircleui.png');
     
     // Load Gameplay Music - All URLs properly encoded
-    this.load.audio('rave-planet', encodeURI('https://rosebud.ai/assets/Rave Planet by Matrika.mp3?cAI4'));
-    this.load.audio('guns-n-drive', encodeURI('https://rosebud.ai/assets/Guns and Drive by INPLUSMUSIC.mp3?7avh'));
-    this.load.audio('supercell', encodeURI('https://rosebud.ai/assets/Supercell by Tatami.mp3?E4JF'));
-    this.load.audio('dont-stop-me', encodeURI("https://rosebud.ai/assets/Don't Stop Me by Tatami.mp3?SQyt"));
-    this.load.audio('find-home', encodeURI('https://rosebud.ai/assets/Find Home by Arenas.mp3?jhA0'));
-    this.load.audio('fast-light', encodeURI('https://rosebud.ai/assets/Fast and Light Technology by Audio Tape.mp3?Ob1X'));
+    this.load.audio('rave-planet', encodeURI('assets/rave-planet-by-matrika.mp3'));
+    this.load.audio('guns-n-drive', encodeURI('assets/guns-and-drive-by-inplusmusic.mp3'));
+    this.load.audio('supercell', encodeURI('assets/supercell-by-tatami.mp3'));
+    this.load.audio('dont-stop-me', encodeURI("assets/dont-stop-me-by-tatami.mp3"));
+    this.load.audio('find-home', encodeURI('assets/find-home-by-arenas.mp3'));
+    this.load.audio('fast-light', encodeURI('assets/fast-and-light-technology-by-audio-tape.mp3'));
     // back-2-back is only for menu, not loaded in GameScene
-    this.load.audio('menu-click', encodeURI('https://rosebud.ai/assets/Menu Click by Leszek_Szary of freesound_community.mp3?cDI3'));
-    this.load.audio('successful-hit', encodeURI('https://rosebud.ai/assets/Successful Hit (Video Game - Bonus) by Universfield.mp3?WIIP'));
-    this.load.audio('missed-hit', encodeURI('https://rosebud.ai/assets/Missed Hit (Babyscratch) by NobodyYouKnowOf (Freesound) of freesound_community.mp3?IrRO'));
-    this.load.audio('healing', encodeURI('https://rosebud.ai/assets/Healing (Magic (6)) by yodguard.mp3?kooR'));
-    this.load.audio('counterattack', encodeURI('https://rosebud.ai/assets/Counterattack (Game Over Arcade) by myfox14 (Freesound) of freesound_community.mp3?gwwn'));
-    this.load.audio('enemy-death', encodeURI('https://rosebud.ai/assets/Enemy Death (Sfx12 - Boss_Damage1) by Data_pion.mp3?xOI1'));
-    this.load.audio('player-death', encodeURI('https://rosebud.ai/assets/Player Death (Game Explosion) by SoundReality.mp3?8wfG'));
-    this.load.audio('game-over', encodeURI('https://rosebud.ai/assets/Game Over by Ivan_Luzan.mp3?DWU2'));
-    this.load.audio('severe-warning', encodeURI('https://rosebud.ai/assets/Severe Warning Alarm by freesound_community.mp3?NZxV'));
+    this.load.audio('menu-click', encodeURI('assets/menu-click-by-leszek_szary-of-freesound_community.mp3'));
+    this.load.audio('successful-hit', encodeURI('assets/successful-hit-video-game-bonus-by-universfield.mp3'));
+    this.load.audio('missed-hit', encodeURI('assets/missed-hit-babyscratch-by-nobodyyouknowof-freesound-of-freesound_community.mp3'));
+    this.load.audio('healing', encodeURI('assets/healing-magic-6-by-yodguard.mp3'));
+    this.load.audio('counterattack', encodeURI('assets/counterattack-game-over-arcade-by-myfox14-freesound-of-freesound_community.mp3'));
+    this.load.audio('enemy-death', encodeURI('assets/enemy-death-sfx12-boss_damage1-by-data_pion.mp3'));
+    this.load.audio('player-death', encodeURI('assets/player-death-game-explosion-by-soundreality.mp3'));
+    this.load.audio('game-over', encodeURI('assets/game-over-by-ivan_luzan.mp3'));
+    this.load.audio('severe-warning', encodeURI('assets/severe-warning-alarm-by-freesound_community.mp3'));
   }
   create() {
     const { width, height } = this.scale;
@@ -182,19 +191,16 @@ export default class GameScene extends Phaser.Scene {
         this.sound.stopAll();
     });
     
-    // Y2K RAVE MAXIMALIST PALETTE
-    this.neonColors = [
-      0xff00ff, // Magenta
-      0x00ffff, // Cyan
-      0xccff00, // Lime
-      0xff3300, // Neon Red/Orange
-      0x9d00ff, // Purple
-      0xffffff  // White
-    ];
+    // Y2K RAVE MAXIMALIST PALETTE — Block 4: theme-driven. The theme must be
+    // live BEFORE any effect generator runs, since they all sample neonColors
+    // (or theme fields) at creation time.
+    ThemeManager.init(this.registry);
+    const theme = ThemeManager.current;
+    this.neonColors = theme.neon.slice();
     this.currentColorIndex = 0;
     
-    // 1. BLACK VOID BACKGROUND
-    this.add.rectangle(width / 2, height / 2, width, height, 0x000000).setDepth(-100);
+    // 1. VOID BACKGROUND (themed; neonRush = near-black, shipped feel)
+    this.add.rectangle(width / 2, height / 2, width, height, theme.bgBottom).setDepth(-100);
     
     // 2. HALFTONE DOT GRID
     this.createHalftoneGrid();
@@ -205,8 +211,8 @@ export default class GameScene extends Phaser.Scene {
     // 4. GEOMETRIC CHAOS (Arrows, Triangles)
     this.createGeometricChaos();
     
-    // Center glow (keeping for depth but tweaking)
-    this.centerGlow = this.add.circle(width / 2, height / 2, width * 0.4, 0xff00ff, 0.1);
+    // Center glow (keeping for depth but tweaking) — themed (neonRush glow = the old magenta)
+    this.centerGlow = this.add.circle(width / 2, height / 2, width * 0.4, theme.glow, 0.1);
     this.centerGlow.setBlendMode(Phaser.BlendModes.ADD);
     this.centerGlow.setDepth(-10);
     
@@ -227,6 +233,25 @@ export default class GameScene extends Phaser.Scene {
     
     // Simple rhythm system - 120 BPM (Initialize BEFORE particle effects that use it)
     this.rhythmSystem = new RhythmSystem(this, 120);
+    // ── v2 systems: juice, powerups, video layers (theme initialized above) ──
+    this.juice = new Juice(this);
+    this.juice.startFloaters();
+    this.powerups = new PowerupManager(this, {
+      onApply: (id, def) => this.showFeedback(def.label + '!', def.color)
+    });
+    // NOTE: ThemeManager.applyToGameScene() runs LATER in create(), after
+    // laneConfig and the player/enemy exist — here it would be a no-op on
+    // all three (neonColors was already themed above).
+    this._setupVideoLayers();
+    this.events.once('shutdown', () => {
+      this.juice?.destroy();
+      this.videoBg?.destroy();
+      this.videoGuest?.destroy();
+      this._removePlaylistSearchInput();
+      // Block 9: the Conductor runs on setInterval, not the Phaser clock —
+      // without destroy() its scheduler keeps firing after the scene dies.
+      this.rhythmSystem?.destroy();
+    });
     
     // Add radial gradient overlay
     this.createRadialGradient();
@@ -471,6 +496,11 @@ export default class GameScene extends Phaser.Scene {
         }  // Right - Yellow
     ];
     
+    // Theme the lane colors (and player/enemy tints) NOW — laneConfig and the
+    // actors finally exist, and the target zones below sample lane.color at
+    // creation time.
+    ThemeManager.applyToGameScene(this);
+    
     this.targetZones = [];
     
     this.laneConfig.forEach(lane => {
@@ -495,6 +525,36 @@ export default class GameScene extends Phaser.Scene {
     this.detectedBPMs = new Map(); // Cache for track BPMs
     this.rhythmSystem.start();
     this.rhythmSystem.on('beat', () => this.onBeat());
+    
+    // Block 7: leaderboard (local always; InstantDB only if configured) and
+    // the per-run input-replay recorder that powers future ghost battles.
+    LeaderboardService.configure(); // async, guarded — no-ops without config
+    this.replayRecorder = new ReplayRecorder(() => this.rhythmSystem.nowMs());
+    this.replayRecorder.start();
+    
+    // Block 8 (groundwork): chart mode + tap-to-record dev tool.
+    // F9 toggles recording (play a track, tap along); stopping exports the
+    // chart JSON to console + download. window.ShuffleRushChart.load(json)
+    // switches spawning to the authored notes (random generator = default).
+    this.chart = null;
+    this.chartNoteIndex = 0;
+    this.chartRecorder = null;
+    this.input.keyboard?.on('keydown-F9', () => {
+      if (this.chartRecorder?.active) {
+        this.chartRecorder.stop();
+        this.chartRecorder.export();
+        this.showFeedback('CHART EXPORTED (console + download)', 0x00ff99);
+        this.chartRecorder = null;
+      } else {
+        this.chartRecorder = new ChartRecorder({ bpm: this.currentBPM, title: this.currentTrackKey || 'untitled' });
+        this.chartRecorder.start();
+        this.showFeedback('CHART RECORDING — F9 TO EXPORT', 0x00ff99);
+      }
+    });
+    window.ShuffleRushChart = {
+      load: (chart) => this.loadChart(chart),
+      unload: () => { this.chart = null; this.chartNoteIndex = 0; console.log('chart unloaded — random generator active'); }
+    };
     
     // Music Playlist System - Setup and start music AFTER rhythm system is initialized
     this.setupMusicPlaylist();
@@ -526,6 +586,7 @@ export default class GameScene extends Phaser.Scene {
     
     // Pulse Speaker Rings on Beat
     this.pulseSpeakerRings();
+    this.juice?.onBeat();
     
     // Scramble Geometric Chaos
     this.scrambleGeometricChaos();
@@ -539,6 +600,10 @@ export default class GameScene extends Phaser.Scene {
     }
     
     this.beatCount++;
+    
+    // Block 8: in chart mode the authored notes[] drive spawning (see
+    // _updateChartSpawns) — the random generator stands down.
+    if (this.chart) return;
     
     // Dynamic Spawn Logic: vary the gap between beats
     if (this.nextSpawnBeat === undefined) this.nextSpawnBeat = 0;
@@ -579,9 +644,20 @@ export default class GameScene extends Phaser.Scene {
         this.streakCount = 1;
     }
     
-    const lane = this.laneConfig[laneIdx];
     this.lastSelectedKey = selectedKey;
     this.lastLaneIdx = laneIdx;
+    this._spawnMarker(laneIdx, selectedKey);
+  }
+  
+  /**
+   * Build one falling marker (extracted so the random generator and chart
+   * mode share the exact same construction — Block 8).
+   * opts.targetTime overrides the default nowMs()+travelTime hit moment.
+   */
+  _spawnMarker(laneIdx, selectedKey, opts = {}) {
+    const { height } = this.scale;
+    const lane = this.laneConfig[laneIdx];
+    if (!lane) return null;
     
     const isFever = this.feverMode;
     const markerColor = isFever ? 0xffffff : lane.color; // White in fever, or lane color
@@ -611,11 +687,14 @@ export default class GameScene extends Phaser.Scene {
     // Mobile devices get faster falling circles for increased difficulty (1.4x speed)
     // Desktop uses standard speed (tapping is easier than typing)
     const speedMultiplier = this.isMobile ? 1.4 : 2.0;
-    const travelTime = this.rhythmSystem.beatInterval * speedMultiplier;
+    const travelTime = this.rhythmSystem.beatInterval * speedMultiplier * (this.powerups ? this.powerups.travelScale() : 1);
     
     const markerData = {
       sprite: markerContainer,
-      targetTime: this.time.now + travelTime,
+      targetTime: opts.targetTime !== undefined ? opts.targetTime : this.rhythmSystem.nowMs() + travelTime,
+      travelTime: travelTime,
+      spawnY: height * 0.2,
+      targetY: height * 0.85,
       requiredKey: selectedKey,
       laneX: lane.x,
       laneColor: lane.color,
@@ -623,19 +702,87 @@ export default class GameScene extends Phaser.Scene {
     };
     this.beatMarkers.push(markerData);
     
-    // Animate marker falling to target zone
-    this.tweens.add({
-      targets: markerContainer,
-      y: height * 0.85,
-      duration: travelTime,
-      ease: 'Linear',
-      onComplete: () => {
-        if (!markerData.hit) {
-          this.handleMiss(markerData);
+    if (GameScene.MARKER_TWEEN_FALLBACK) {
+      // Legacy path: tween-driven fall + tween-onComplete miss detection.
+      // Kept only as an emergency fallback; judgment/visual sync is worse here
+      // because frame drops make the tween trail the audio clock.
+      this.tweens.add({
+        targets: markerContainer,
+        y: markerData.targetY,
+        duration: travelTime,
+        ease: 'Linear',
+        onComplete: () => {
+          if (!markerData.hit) {
+            this.handleMiss(markerData);
+          }
         }
+      });
+    }
+    // Default path: marker y is driven from conductor time in update() —
+    // see updateMarkerPositions(). Miss detection happens there too.
+  }
+  
+  /** Block 8: switch spawning to an authored chart. Returns {ok, reason?}. */
+  loadChart(chart) {
+    const check = validateChart(chart);
+    if (!check.ok) {
+      console.warn('loadChart rejected:', check.reason);
+      this.showFeedback('CHART INVALID: ' + check.reason, 0xff0000);
+      return check;
+    }
+    this.chart = { meta: { ...chart.meta }, notes: sortNotes(chart.notes) };
+    this.chartNoteIndex = 0;
+    this._chartClockStart = this.rhythmSystem.nowMs();
+    this.updateSystemBPM(Number(chart.meta.bpm));
+    console.log(`✓ Chart loaded: ${chart.meta.title || 'untitled'} — ${this.chart.notes.length} notes @ ${chart.meta.bpm} BPM`);
+    this.showFeedback('CHART MODE', 0x00ff99);
+    return { ok: true };
+  }
+  
+  /** Block 8: spawn authored notes travelTime ahead of their hit moment. */
+  _updateChartSpawns() {
+    if (!this.chart || this.isPaused || this.isDying) return;
+    const notes = this.chart.notes;
+    if (this.chartNoteIndex >= notes.length) return;
+    // Song clock: bound track position when playing, else time since load.
+    const bound = this.currentTrack && this.currentTrack.isPlaying;
+    const songPos = bound
+      ? this.rhythmSystem.songPositionMs()
+      : this.rhythmSystem.nowMs() - this._chartClockStart;
+    const speedMultiplier = this.isMobile ? 1.4 : 2.0;
+    const travelTime = this.rhythmSystem.beatInterval * speedMultiplier * (this.powerups ? this.powerups.travelScale() : 1);
+    const nextIdx = spawnCursor(notes, this.chartNoteIndex, songPos, travelTime);
+    for (let i = this.chartNoteIndex; i < nextIdx; i++) {
+      const [timeMs, lane, key] = notes[i];
+      // Hit moment on the judgment clock = now + however long until the song
+      // clock reaches the note (late notes clamp to a minimum fall).
+      const untilHit = Math.max(50, timeMs - songPos);
+      this._spawnMarker(lane, key, { targetTime: this.rhythmSystem.nowMs() + untilHit });
+    }
+    this.chartNoteIndex = nextIdx;
+  }
+  
+  /**
+   * v2.1 (Block 1): drive marker fall from the audio clock instead of tweens,
+   * so visuals can never trail judgment under frame drops. Also sweeps misses:
+   * a marker dies when it is later than the widest (late) hit window, which —
+   * unlike the old tween-onComplete — makes late hits actually reachable.
+   */
+  updateMarkerPositions() {
+    if (GameScene.MARKER_TWEEN_FALLBACK) return;
+    if (this.isPaused || this.isDying || !this.rhythmSystem || !this.beatMarkers) return;
+    const now = this.rhythmSystem.nowMs();
+    const lateWindow = 300 * (this.powerups ? this.powerups.windowScale() : 1);
+    // Iterate over a copy: handleMiss splices this.beatMarkers.
+    for (const marker of [...this.beatMarkers]) {
+      if (marker.hit || !marker.sprite) continue;
+      if (marker.travelTime === undefined) continue; // safety: pre-v2.1 marker
+      if (now - marker.targetTime > lateWindow) {
+        this.handleMiss(marker);
+        continue;
       }
-    });
-    // Background pulse (More intense in Fever Mode) handled above now
+      marker.sprite.y = ConductorMath.markerY(now, marker.targetTime, marker.travelTime, marker.spawnY, marker.targetY);
+    }
   }
   
   onHitInput(event, tappedLaneIdx = null) {
@@ -670,9 +817,9 @@ export default class GameScene extends Phaser.Scene {
     // Filter markers that are within hit window AND match the key/lane
     const hittableMarkers = this.beatMarkers.filter(marker => {
         if (marker.hit) return false;
-        const diff = Math.abs(marker.targetTime - this.time.now);
+        const diff = Math.abs(marker.targetTime - this.rhythmSystem.nowMs());
         // Basic window 300ms
-        if (diff >= 300) return false;
+        if (diff >= 300 * (this.powerups ? this.powerups.windowScale() : 1)) return false;
         
         // If tap input with specific lane, only hit markers in that lane
         if (tappedLaneIdx !== null) {
@@ -690,7 +837,7 @@ export default class GameScene extends Phaser.Scene {
     });
     // Find the absolute closest among the valid candidates
     hittableMarkers.forEach(marker => {
-        const diff = Math.abs(marker.targetTime - this.time.now);
+        const diff = Math.abs(marker.targetTime - this.rhythmSystem.nowMs());
         if (diff < closestDiff) {
             closestDiff = diff;
             closestMarker = marker;
@@ -707,16 +854,26 @@ export default class GameScene extends Phaser.Scene {
       let feedback = 'HIT!';
       let points = 100;
       let damage = 20;
-      if (closestDiff < 100) {
+      const wScale = this.powerups ? this.powerups.windowScale() : 1;
+      if (closestDiff < 100 * wScale) {
         feedback = 'PERFECT!';
         points = 200;
         damage = 30;
-      } else if (closestDiff < 200) {
+      } else if (closestDiff < 200 * wScale) {
         feedback = 'GOOD!';
         points = 150;
         damage = 25;
       }
+      points = Math.round(points * (this.powerups ? this.powerups.scoreMult() : 1));
       this.score += points;
+      
+      // Block 7: feed the ghost-replay recorder (judgment on the audio clock)
+      const hitLaneIdx = this.laneConfig.findIndex(l => l.x === closestMarker.laneX);
+      this.replayRecorder?.record(hitLaneIdx, feedback === 'PERFECT!' ? 'perfect' : feedback === 'GOOD!' ? 'good' : 'ok');
+      // Block 8: tap-to-record dev tool — times on the song clock
+      if (this.chartRecorder?.active) {
+        this.chartRecorder.record(this.rhythmSystem.songPositionMs(), hitLaneIdx, closestMarker.requiredKey);
+      }
       
       // Check for new high score during gameplay
       const currentHighScore = parseInt(localStorage.getItem('shuffleRushHighScore') || '0');
@@ -767,19 +924,33 @@ export default class GameScene extends Phaser.Scene {
       
       // Visual Impact - Use the lane position of the hit marker
       this.createShockwave(closestMarker.laneX, height * 0.85, closestMarker.laneColor);
+      this.juice?.burst(closestMarker.laneX, height * 0.85, closestMarker.laneColor);
+      if (feedback === 'PERFECT!') this.juice?.hitstop(60, 0.3);
       
       this.player.attack();
       this.enemy.takeDamage(damage);
       // Check if enemy defeated - spawn new one for endless mode
       if (this.enemy.health <= 0) {
+        if (this.enemy.sprite) this.powerups?.onEnemyDefeated(this.enemy.sprite.x, this.enemy.sprite.y);
         this.spawnNewEnemy();
       }
     }
   }
   handleMiss(markerData) {
+      // v2: powerup interception before any penalty
+      if (this.powerups && this.powerups.consumeShield()) {
+          this.showFeedback('SHIELDED!', 0x05ffa1);
+          if (markerData.sprite) markerData.sprite.destroy();
+          const si = this.beatMarkers.indexOf(markerData);
+          if (si > -1) this.beatMarkers.splice(si, 1);
+          return;
+      }
+      const keepCombo = this.powerups ? this.powerups.consumeComboKeeper() : false;
       // Missed the beat (or wrong key)
-      this.combo = 0;
+      if (!keepCombo) { this.combo = 0; } else { this.showFeedback('COMBO KEPT!', 0xb967ff); }
       this.totalMisses++;
+      // Block 7: ghost-replay feed
+      this.replayRecorder?.record(this.laneConfig.findIndex(l => l.x === markerData.laneX), 'miss');
       this.updateComboVisuals();
       this.showFeedback('MISS', 0xff0000);
       
@@ -1091,14 +1262,54 @@ export default class GameScene extends Phaser.Scene {
     }
   }
   
+  async _setupVideoLayers() {
+    const vids = this.registry.get('customVideos') || [];
+    if (!vids.length) return;
+    // Block 3: prefer the video the player SELECTED in the Dancer Lab gallery;
+    // fall back to the latest upload (the pre-gallery behavior).
+    const selectedKey = this.registry.get('selectedVideoKey');
+    const latest = vids.find(v => v.key === selectedKey) || vids[vids.length - 1];
+    const { width, height } = this.scale;
+    try {
+      if (this.registry.get('videoBgEnabled')) {
+        const blob = await MediaLibrary.getBlob('video:' + latest.key);
+        if (blob) {
+          this.videoBg = new VideoActor(this, blob, {
+            key: 'vbg-' + latest.key, sound: !!this.registry.get('videoBgSound'), maxDim: 1024, fps: 24
+          });
+          this.videoBg.onReady = () => {
+            const img = this.add.image(width / 2, height / 2, this.videoBg.key).setDepth(-5).setAlpha(0.35);
+            img.setScale(Math.max(width / img.width, height / img.height));
+            this.videoBgImage = img;
+          };
+        }
+      }
+      if (this.registry.get('videoOpponentEnabled')) {
+        const blob = await MediaLibrary.getBlob('video:' + latest.key);
+        if (blob) {
+          this.videoGuest = new VideoActor(this, blob, { key: 'vguest-' + latest.key, sound: false, maxDim: 360, fps: 24 });
+          this.videoGuest.onReady = () => {
+            const gx = width * 0.78, gy = height * 0.30;
+            this.videoGuestFrame = this.add.rectangle(gx, gy, 236, 156, 0x000000, 0.55)
+              .setStrokeStyle(3, ThemeManager.current.beam).setDepth(6);
+            const img = this.add.image(gx, gy, this.videoGuest.key).setDepth(7);
+            img.setScale(Math.min(228 / img.width, 148 / img.height));
+            this.videoGuestImage = img;
+          };
+        }
+      }
+    } catch (e) { console.warn('video layers unavailable:', e); }
+  }
+
   createHalftoneGrid() {
     const { width, height } = this.scale;
     const spacing = 40;
     this.halftoneDots = [];
     
+    const dotColor = ThemeManager.current.halftone ?? 0x333333; // Block 4
     for (let x = 0; x < width + spacing; x += spacing) {
       for (let y = 0; y < height + spacing; y += spacing) {
-        const dot = this.add.circle(x, y, 2, 0x333333);
+        const dot = this.add.circle(x, y, 2, dotColor);
         dot.setDepth(-90);
         dot.originalX = x;
         dot.originalY = y;
@@ -1314,7 +1525,8 @@ export default class GameScene extends Phaser.Scene {
       );
       beatCircle.setScale(Phaser.Math.FloatBetween(0.02, 0.05));
       beatCircle.setAlpha(Phaser.Math.FloatBetween(0.1, 0.25));
-      beatCircle.setTint(Phaser.Math.Between(0, 1) ? 0xff0066 : 0x00ffff);
+      // Block 4: themed tint (neonRush lanes[0]/beam ≈ the old pink/cyan pair)
+      beatCircle.setTint(Phaser.Math.Between(0, 1) ? ThemeManager.current.lanes[0] : ThemeManager.current.beam);
       beatCircle.setBlendMode(Phaser.BlendModes.ADD);
       beatCircle.setDepth(-1);
       
@@ -1640,9 +1852,11 @@ export default class GameScene extends Phaser.Scene {
             yoyo: true
         });
         
-        // Color cycle bars based on position
-        const hue = (this.time.now * 0.05 + index * 10) % 360;
-        const color = Phaser.Display.Color.HSVToRGB(hue / 360, 1, 1).color;
+        // Block 4: cycle bars through the THEME palette (was a raw HSV rainbow
+        // that ignored the theme entirely). Same motion, themed colors.
+        const palette = ThemeManager.current.neon;
+        const step = Math.floor(this.time.now / 400);
+        const color = palette[(step + index) % palette.length];
         bar.setFillStyle(color, bar.alpha);
     });
   }
@@ -1806,12 +2020,18 @@ export default class GameScene extends Phaser.Scene {
     
     if (this.isPaused) {
       // Pause the game
+      // The conductor's audio clock keeps ticking while paused, so remember
+      // when the pause began — resume shifts marker targets by the gap.
+      this._pauseStartedMs = this.rhythmSystem.nowMs();
       this.rhythmSystem.stop();
       this.physics.pause();
       this.tweens.pauseAll();
       if (this.currentTrack && this.currentTrack.isPlaying) {
           this.currentTrack.pause();
       }
+      // Block 9: freeze video layers with the rest of the world
+      this.videoBg?.pause();
+      this.videoGuest?.pause();
       
       // Stop Warning Alarm if playing
       if (this.warningAlarm && this.warningAlarm.isPlaying) {
@@ -1828,11 +2048,25 @@ export default class GameScene extends Phaser.Scene {
       this.showPauseMenu();
     } else {
       // Resume the game
+      // Shift every in-flight marker forward by the paused duration so both
+      // judgment and the time-driven fall pick up exactly where they stopped.
+      if (this._pauseStartedMs !== undefined) {
+        const pausedFor = this.rhythmSystem.nowMs() - this._pauseStartedMs;
+        if (pausedFor > 0 && this.beatMarkers) {
+          for (const m of this.beatMarkers) m.targetTime += pausedFor;
+        }
+        this._pauseStartedMs = undefined;
+      }
       this.rhythmSystem.start();
       this.physics.resume();
       this.tweens.resumeAll();
       if (this.currentTrack && this.currentTrack.isPaused) {
           this.currentTrack.resume();
+          // Block 9: start() re-anchors the beat grid arbitrarily — re-align
+          // it to the track's own grid so beats stay honest after resume.
+          const cached = this.detectedBPMs.get(this.currentTrackKey);
+          const gridOffset = (cached && typeof cached === 'object') ? cached.offset : 0;
+          this.rhythmSystem.syncToPhaserSound(this.currentTrack, gridOffset);
       }
       
       // Resume Warning Alarm if it was active
@@ -1841,6 +2075,8 @@ export default class GameScene extends Phaser.Scene {
           this.lowHealthOverlay.setVisible(true);
           this.lowHealthText.setVisible(true);
       }
+      this.videoBg?.resume();
+      this.videoGuest?.resume();
       
       // Hide pause menu
       this.hidePauseMenu();
@@ -1897,13 +2133,18 @@ export default class GameScene extends Phaser.Scene {
     // Check if audio exists in cache before playing
     if (this.cache.audio.exists(track.key)) {
         console.log('✓ Audio file FOUND in cache, playing now...');
-        this.currentTrack = this.sound.add(track.key, { volume: 0.4 });
+        this.currentTrack = this.sound.add(track.key, { volume: this.registry.get('musicVol') ?? 0.4 });
         
         // AUTO BPM DETECTION
+        // Block 2: the cache stores the FULL grid {bpm, offset} — replays must
+        // re-align the beat grid, not just the tempo, or beats drift off the
+        // track's own first-beat offset on every replay after the first.
+        let cachedGrid = null;
         if (this.detectedBPMs.has(track.key)) {
-            const cachedBPM = this.detectedBPMs.get(track.key);
-            console.log(`ℹ️ Using cached BPM for ${track.key}: ${cachedBPM}`);
-            this.updateSystemBPM(cachedBPM);
+            cachedGrid = this.detectedBPMs.get(track.key);
+            if (typeof cachedGrid === 'number') cachedGrid = { bpm: cachedGrid, offset: 0 }; // legacy shape
+            console.log(`ℹ️ Using cached grid for ${track.key}: ${cachedGrid.bpm} BPM, offset ${cachedGrid.offset}s`);
+            this.updateSystemBPM(cachedGrid.bpm);
         } else {
             // Get the actual AudioBuffer for analysis
             // In Phaser 3 WebAudio, it's accessible via the sound instance
@@ -1913,15 +2154,28 @@ export default class GameScene extends Phaser.Scene {
                 this.showFeedback('ANALYZING BEATS...', 0xffffff);
                 
                 // Use a slight delay to allow the UI to update if needed
+                const analyzedSound = this.currentTrack;   // snapshot for the stale-guard below
                 this.time.delayedCall(100, async () => {
-                    const detectedBPM = await BeatDetector.detectBPM(audioBuffer);
-                    this.detectedBPMs.set(track.key, detectedBPM);
-                    this.updateSystemBPM(detectedBPM);
+                    const grid = await BeatDetector.detectBeatGrid(audioBuffer);
+                    // Cache is always safe to fill — it's keyed by track.
+                    this.detectedBPMs.set(track.key, { bpm: grid.bpm, offset: grid.offset });
+                    // But GLOBAL playback state may only change if this track
+                    // is still the current one — skipping tracks quickly would
+                    // otherwise resync the conductor to a stale song's grid.
+                    if (this.currentTrackKey !== track.key || this.currentTrack !== analyzedSound) return;
+                    this.updateSystemBPM(grid.bpm);
+                    // Align the beat grid to the track's own first-beat offset
+                    this.rhythmSystem.syncToPhaserSound(this.currentTrack, grid.offset);
                 });
             }
         }
 
         this.currentTrack.play();
+        // Cached-grid path: sync AFTER play() so syncToPhaserSound sees the
+        // live sound (it reads sound.seek/isPlaying for mid-song alignment).
+        if (cachedGrid) {
+            this.rhythmSystem.syncToPhaserSound(this.currentTrack, cachedGrid.offset);
+        }
         
         // When track ends, play another one
         this.currentTrack.once('complete', () => {
@@ -2283,12 +2537,50 @@ export default class GameScene extends Phaser.Scene {
     closeBtn.on('pointerdown', () => this.hidePlaylistDisplay());
     this.playlistContainer.add(closeBtn);
     
-    // Track list area
-    const listStartY = panelY - panelHeight / 2 + 90;
+    // Block 5: search input over the panel (DOM element, canvas-positioned).
+    // Filters this.playlist live; empty query restores the full list.
+    const searchAnchor = this.add.rectangle(panelX, panelY - panelHeight / 2 + 68, panelWidth - 80, 30, 0x000000, 0);
+    this.playlistContainer.add(searchAnchor);
+    this._playlistSearchAnchor = searchAnchor;
+    this._createPlaylistSearchInput();
+    
+    // Track list area (nudged down to fit the search bar)
+    const listStartY = panelY - panelHeight / 2 + 108;
     const trackSpacing = 48;
     
-    // Create track entries
-    this.playlist.forEach((track, index) => {
+    // Entries live in their own sub-container so search can rebuild them
+    this.playlistEntriesContainer = this.add.container(0, 0);
+    this.playlistContainer.add(this.playlistEntriesContainer);
+    this._playlistLayout = { panelX, panelY, panelWidth, panelHeight, listStartY, trackSpacing };
+    this._buildPlaylistEntries(this.playlist);
+    
+    // Slide in animation
+    this.playlistContainer.setAlpha(0);
+    this.playlistContainer.setScale(0.95);
+    this.tweens.add({
+      targets: this.playlistContainer,
+      alpha: 1,
+      scale: 1,
+      duration: 300,
+      ease: 'Back.easeOut'
+    });
+  }
+  
+  /** Block 5: (re)build the playlist rows for the given (possibly filtered) tracks. */
+  _buildPlaylistEntries(tracks) {
+    if (!this.playlistEntriesContainer || !this._playlistLayout) return;
+    this.playlistEntriesContainer.removeAll(true);
+    const { panelX, panelY, panelWidth, panelHeight, listStartY, trackSpacing } = this._playlistLayout;
+    
+    if (!tracks.length) {
+      const none = this.add.text(panelX, listStartY + 40, 'No matching tracks', {
+        fontSize: '18px', fontFamily: 'Arial', color: '#ffff00'
+      }).setOrigin(0.5);
+      this.playlistEntriesContainer.add(none);
+      return;
+    }
+    
+    tracks.forEach((track, index) => {
       const trackY = listStartY + (index * trackSpacing);
       
       // Basic vertical overflow check
@@ -2302,7 +2594,7 @@ export default class GameScene extends Phaser.Scene {
       // Track background highlight (larger hit area)
       const trackBg = this.add.rectangle(panelX, trackY, panelWidth - 40, 42, trackBgColor, trackBgAlpha);
       trackBg.setStrokeStyle(isCurrentTrack ? 2 : 1, isCurrentTrack ? 0x00ff00 : 0x444444);
-      this.playlistContainer.add(trackBg);
+      this.playlistEntriesContainer.add(trackBg);
       
       // Now Playing indicator
       let displayText = isCurrentTrack ? '▶ ' : '  ';
@@ -2315,7 +2607,7 @@ export default class GameScene extends Phaser.Scene {
         fontStyle: isCurrentTrack ? 'bold' : 'normal'
       });
       trackText.setOrigin(0, 0.5);
-      this.playlistContainer.add(trackText);
+      this.playlistEntriesContainer.add(trackText);
       
       // Artist name
       const artistText = this.add.text(panelX - panelWidth / 2 + 55, trackY + 11, track.artist, {
@@ -2324,7 +2616,7 @@ export default class GameScene extends Phaser.Scene {
         color: isCurrentTrack ? '#00ff00' : '#888888'
       });
       artistText.setOrigin(0, 0.5);
-      this.playlistContainer.add(artistText);
+      this.playlistEntriesContainer.add(artistText);
       
       // Input handling
       trackBg.setInteractive({ useHandCursor: true });
@@ -2359,22 +2651,68 @@ export default class GameScene extends Phaser.Scene {
         }
       });
     });
+  }
+  
+  /** Block 5: DOM search input for the playlist overlay (canvas-positioned). */
+  _createPlaylistSearchInput() {
+    this._removePlaylistSearchInput();
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.placeholder = '🔎 search tracks…';
+    input.autocomplete = 'off';
+    input.style.position = 'absolute';
+    input.style.zIndex = '1000';
+    input.style.background = 'rgba(0,0,0,0.85)';
+    input.style.border = '2px solid #9d00ff';
+    input.style.borderRadius = '6px';
+    input.style.color = '#ffffff';
+    input.style.fontFamily = 'Arial, sans-serif';
+    input.style.fontSize = '14px';
+    input.style.padding = '2px 8px';
+    input.style.outline = 'none';
+    document.body.appendChild(input);
+    this._playlistSearchEl = input;
     
-    // Slide in animation
-    this.playlistContainer.setAlpha(0);
-    this.playlistContainer.setScale(0.95);
-    this.tweens.add({
-      targets: this.playlistContainer,
-      alpha: 1,
-      scale: 1,
-      duration: 300,
-      ease: 'Back.easeOut'
-    });
+    const applyFilter = () => {
+      const q = input.value;
+      const filtered = search(this.playlist, q, [{ name: 'title', weight: 2 }, { name: 'artist', weight: 1 }]);
+      this._buildPlaylistEntries(filtered);
+    };
+    input.addEventListener('keyup', applyFilter);
+    input.addEventListener('input', applyFilter); // covers the ✕ clear button
+    // Keyboard gameplay input must not steal characters while typing
+    input.addEventListener('keydown', (e) => e.stopPropagation());
+    
+    this._syncPlaylistSearchPosition();
+    setTimeout(() => input.focus(), 50);
+  }
+  
+  _syncPlaylistSearchPosition() {
+    const input = this._playlistSearchEl, anchor = this._playlistSearchAnchor;
+    if (!input || !anchor || !anchor.active || !this.scale?.canvas) return;
+    const canvasBounds = this.scale.canvas.getBoundingClientRect();
+    const b = anchor.getBounds();
+    const sx = canvasBounds.width / this.scale.width;
+    const sy = canvasBounds.height / this.scale.height;
+    input.style.left = `${canvasBounds.left + b.x * sx}px`;
+    input.style.top = `${canvasBounds.top + b.y * sy}px`;
+    input.style.width = `${b.width * sx}px`;
+    input.style.height = `${b.height * sy}px`;
+  }
+  
+  _removePlaylistSearchInput() {
+    // DOM element only — the anchor must survive because
+    // _createPlaylistSearchInput() calls this right before creating the new
+    // input, and the position sync needs the anchor showPlaylistDisplay()
+    // just set. The anchor is cleared on panel teardown (hide) instead.
+    if (this._playlistSearchEl) { this._playlistSearchEl.remove(); this._playlistSearchEl = null; }
   }
   
   hidePlaylistDisplay() {
     if (!this.playlistDisplayVisible) return;
     this.playlistDisplayVisible = false;
+    this._removePlaylistSearchInput();
+    this._playlistSearchAnchor = null;                 // panel teardown — anchor dies with the container
     
     if (this.playlistContainer) {
       this.tweens.add({
@@ -2624,6 +2962,16 @@ export default class GameScene extends Phaser.Scene {
       
       const currentTotalEnemies = parseInt(localStorage.getItem('shuffleRushTotalEnemies') || '0');
       localStorage.setItem('shuffleRushTotalEnemies', (currentTotalEnemies + this.enemiesDefeated).toString());
+      
+      // Block 7: finish the ghost replay now (the recorder needs the run's
+      // end moment) but DON'T submit yet — submission happens once, from the
+      // SAVE SCORE button, under the name the player actually enters.
+      // Auto-submitting 'PLAYER' here created duplicate leaderboard rows.
+      this._finishedReplay = null;
+      if (this.replayRecorder && this.score > 0) {
+          this._finishedReplay = this.replayRecorder.finish();
+          this.replayRecorder = null;
+      }
       
       const { width, height } = this.scale;
       
@@ -2900,18 +3248,15 @@ export default class GameScene extends Phaser.Scene {
           if (isEditing) return;
           this.sound.play('successful-hit', { volume: 0.5 });
           
-          // Save to Leaderboard
-          const leaderboard = JSON.parse(localStorage.getItem('shuffleRushLeaderboard') || '[]');
-          leaderboard.push({
+          // Save to Leaderboard — LeaderboardService is the single write path
+          // (local top-10 always; remote when InstantDB is configured), with
+          // the ghost replay attached under the player's chosen name.
+          LeaderboardService.submitScore({
               name: playerName,
               score: this.score,
               enemies: this.enemiesDefeated,
-              date: new Date().toLocaleDateString()
-          });
-          
-          // Sort and keep top 10
-          leaderboard.sort((a, b) => b.score - a.score);
-          localStorage.setItem('shuffleRushLeaderboard', JSON.stringify(leaderboard.slice(0, 10)));
+              replay: this._finishedReplay
+          }).catch(e => console.warn('leaderboard submit failed:', e));
           
           // Visual feedback
           submitText.setText('RECORDED!');
@@ -3105,7 +3450,12 @@ celebrateHighScore() {
   }
   
   update() {
-    // Game loop
+    this.updateMarkerPositions();
+    this._updateChartSpawns();
+    this._syncPlaylistSearchPosition();
   }
 }
+
+// Block 1 escape hatch: set true to restore the legacy tween-driven marker fall.
+GameScene.MARKER_TWEEN_FALLBACK = false;
 

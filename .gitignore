@@ -1,0 +1,12 @@
+# Game assets (images/audio from the Rosebud export) are NOT committed:
+# licenses for the bundled art/music are unverified, so they stay local.
+# Copy the assets/ folder from the Rosebud export into the repo root
+# before running the game locally (see README / superprompt S2).
+assets/
+
+# InstantDB credentials (Block 7) — never commit real config.
+instant_db_config.js
+
+# OS noise
+.DS_Store
+Thumbs.db

@@ -3,6 +3,9 @@
 import Phaser from 'phaser';
 import { parseGIF, decompressFrames } from 'https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm';
 import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
+import MediaLibrary from './MediaLibrary.js';
+import { search } from './SearchIndex.js';
+import { LIMITS } from './MediaPipeline.js';
 
 export default class ImageUploadScene extends Phaser.Scene {
   constructor() {
@@ -17,9 +20,12 @@ export default class ImageUploadScene extends Phaser.Scene {
     this.dropCooldownDuration = 500; // 500ms cooldown between drops
     this.isProcessingBatch = false; // Prevent overlapping batch uploads
     
-    // File size limits (1GB each file, no total batch limit to allow bulk uploads)
-    this.MAX_IMAGE_SIZE = 1024 * 1024 * 1024; // 1GB per image
-    this.MAX_AUDIO_SIZE = 1024 * 1024 * 1024; // 1GB per audio file
+    // Block 9: honest per-file caps from MediaPipeline (the old 1GB numbers
+    // were fiction — base64 in a browser dies long before that). GIFs get the
+    // gif cap; plain images the image cap; audio the audio cap.
+    this.MAX_IMAGE_SIZE = LIMITS.image; // 10MB
+    this.MAX_GIF_SIZE = LIMITS.gif;     // 15MB
+    this.MAX_AUDIO_SIZE = LIMITS.audio; // 40MB
     this.MAX_TOTAL_UPLOAD = Number.MAX_SAFE_INTEGER; // No batch limit - rely on per-file limit instead
     
     // Debounced gallery refresh to prevent excessive rebuilding during batch uploads
@@ -27,6 +33,11 @@ export default class ImageUploadScene extends Phaser.Scene {
     
     // Track if storage warning has been shown to avoid spam
     this.storageWarningShown = false;
+
+    // Block 9: Phaser 3 does NOT call a scene's shutdown() method by itself —
+    // it only emits the event. Without this hook every DOM overlay (upload
+    // inputs + search box) leaked on scene exit.
+    this.events.once('shutdown', () => this.shutdown());
     
     // Restore custom assets from localStorage
     this.restoreCustomAssets();
@@ -351,6 +362,11 @@ export default class ImageUploadScene extends Phaser.Scene {
         this.dragSide = null;
     });
     
+    // --- 4.5 Search bar (Block 5) — DOM input over the canvas, same overlay
+    // pattern as setupMobileFileUpload/updateDOMButtonPosition.
+    this.searchQuery = '';
+    this._createSearchInput();
+    
     // --- 5. Drag and Drop Setup ---
     this.setupDragAndDrop();
     
@@ -406,40 +422,49 @@ export default class ImageUploadScene extends Phaser.Scene {
     // Get canvas element
     const canvas = this.game.canvas;
     
+    // Every listener is retained so shutdown() can removeEventListener them —
+    // re-entering the scene otherwise stacks stale handlers that call into a
+    // destroyed scene instance.
+    this._canvasDragHandlers = [];
+    const listen = (eventName, fn) => {
+      canvas.addEventListener(eventName, fn, false);
+      this._canvasDragHandlers.push([eventName, fn]);
+    };
+    
     // Prevent default drag behavior on the entire document
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-      canvas.addEventListener(eventName, (e) => {
+      listen(eventName, (e) => {
         e.preventDefault();
         e.stopPropagation();
-      }, false);
+      });
     });
     
     // Show drop zone when dragging files over
-    canvas.addEventListener('dragenter', (e) => {
+    listen('dragenter', (e) => {
       if (e.dataTransfer.types.includes('Files')) {
         this.showDropZone();
       }
-    }, false);
+    });
     
     // Keep drop zone visible while hovering
-    canvas.addEventListener('dragover', (e) => {
+    listen('dragover', (e) => {
       if (e.dataTransfer.types.includes('Files')) {
         this.showDropZone();
       }
-    }, false);
+    });
     
     // Hide drop zone when leaving
-    canvas.addEventListener('dragleave', (e) => {
+    listen('dragleave', (e) => {
       // Only hide if we're leaving the canvas entirely
       const rect = canvas.getBoundingClientRect();
       if (e.clientX < rect.left || e.clientX >= rect.right ||
           e.clientY < rect.top || e.clientY >= rect.bottom) {
         this.hideDropZone();
       }
-    }, false);
+    });
     
     // Handle file drop
-    canvas.addEventListener('drop', (e) => {
+    listen('drop', (e) => {
       this.hideDropZone();
       
       // Check cooldown to prevent rapid successive drops
@@ -453,7 +478,7 @@ export default class ImageUploadScene extends Phaser.Scene {
         // Set cooldown AFTER files finish processing, not before
         this.handleDroppedFiles(files);
       }
-    }, false);
+    });
   }
   
   showDropZone() {
@@ -503,9 +528,16 @@ export default class ImageUploadScene extends Phaser.Scene {
     }
   }
   
+  /** Per-file cap: audio / gif / plain image each use their own honest limit. */
+  maxSizeFor(file, isAudio = false) {
+      if (isAudio) return this.MAX_AUDIO_SIZE;
+      const isGif = file.type === 'image/gif' || /\.gif$/i.test(file.name || '');
+      return isGif ? this.MAX_GIF_SIZE : this.MAX_IMAGE_SIZE;
+  }
+
   validateFileSize(file, isAudio = false) {
-      const maxSize = isAudio ? this.MAX_AUDIO_SIZE : this.MAX_IMAGE_SIZE;
-      return file.size <= maxSize;
+      if (!file || !file.size) return false; // Block 9: 0-byte files are junk
+      return file.size <= this.maxSizeFor(file, isAudio);
   }
   
   formatFileSize(bytes) {
@@ -541,7 +573,7 @@ export default class ImageUploadScene extends Phaser.Scene {
         if (!this.validateFileSize(file, false)) {
           rejectedFiles.push({
             name: file.name,
-            reason: `exceeds ${this.formatFileSize(this.MAX_IMAGE_SIZE)} limit`
+            reason: `exceeds ${this.formatFileSize(this.maxSizeFor(file, false))} limit`
           });
         } else {
           imageFiles.push(file);
@@ -947,6 +979,46 @@ export default class ImageUploadScene extends Phaser.Scene {
     this.updateDOMButtonPosition(fileInput, buttonContainer);
   }
   
+  /**
+   * Block 5: live search over dancers + tracks (+ videos). A real DOM <input>
+   * positioned over the canvas — reuses the fileInputs position-sync loop in
+   * update() and the shutdown() cleanup, same as the upload overlays.
+   */
+  _createSearchInput() {
+    // Invisible Phaser anchor the DOM input tracks (top-left, opposite CLEAR)
+    this.searchAnchor = this.add.rectangle(160, 40, 280, 36, 0x000000, 0);
+    
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.placeholder = '🔎 search dancers & tracks…';
+    input.autocomplete = 'off';
+    input.style.position = 'absolute';
+    input.style.zIndex = '1000';
+    input.style.background = 'rgba(0,0,0,0.75)';
+    input.style.border = '2px solid #00ffff';
+    input.style.borderRadius = '6px';
+    input.style.color = '#ffffff';
+    input.style.fontFamily = 'Arial, sans-serif';
+    input.style.fontSize = '14px';
+    input.style.padding = '2px 8px';
+    input.style.outline = 'none';
+    document.body.appendChild(input);
+    
+    // 'input' fires for EVERY value change — typing, paste, autofill, IME
+    // commits, and the search field's ✕ clear button (keyup alone misses the
+    // non-keyboard edits).
+    input.addEventListener('input', () => {
+      if (this.searchQuery !== input.value) {
+        this.searchQuery = input.value;
+        this.refreshGalleryDebounced(120);
+      }
+    });
+    
+    if (!this.fileInputs) this.fileInputs = [];
+    this.fileInputs.push({ element: input, target: this.searchAnchor });
+    this.updateDOMButtonPosition(input, this.searchAnchor);
+  }
+
   updateDOMButtonPosition(element, target) {
     if (!this.scale || !this.scale.canvas) return;
     
@@ -1004,7 +1076,9 @@ export default class ImageUploadScene extends Phaser.Scene {
     }
   }
 
-  // Override shutdown to clean up DOM elements
+  // DOM cleanup — invoked via the 'shutdown' event hook registered in create().
+  // NOTE: Phaser.Scene has no shutdown() to super-call; the old super.shutdown()
+  // would have thrown had this ever run.
   shutdown() {
       if (this.fileInputs) {
           this.fileInputs.forEach(item => {
@@ -1014,7 +1088,16 @@ export default class ImageUploadScene extends Phaser.Scene {
           });
           this.fileInputs = [];
       }
-      super.shutdown();
+      // Unbind the canvas drag-and-drop listeners registered in
+      // setupDragAndDrop() — they close over this scene instance and would
+      // otherwise stack up (and fire on a dead scene) across re-entries.
+      if (this._canvasDragHandlers) {
+          const canvas = this.game.canvas;
+          this._canvasDragHandlers.forEach(([eventName, fn]) => {
+              canvas.removeEventListener(eventName, fn, false);
+          });
+          this._canvasDragHandlers = null;
+      }
   }
 
   updateToggleButtonStates() {
@@ -1246,7 +1329,7 @@ export default class ImageUploadScene extends Phaser.Scene {
         if (!this.validateFileSize(file, false)) {
             rejectedFiles.push({
                 name: file.name,
-                reason: `exceeds ${this.formatFileSize(this.MAX_IMAGE_SIZE)} limit`
+                reason: `exceeds ${this.formatFileSize(this.maxSizeFor(file, false))} limit`
             });
         } else {
             validFiles.push(file);
@@ -2285,6 +2368,85 @@ export default class ImageUploadScene extends Phaser.Scene {
       this.showFeedback("TRACK REMOVED");
   }
   
+  /** Block 3: remove a video from the library (registry list + stored blob). */
+  removeCustomVideo(keyToRemove) {
+      console.log(`🗑️ Removing video: ${keyToRemove}`);
+      const customVideos = (this.registry.get('customVideos') || []).filter(v => v.key !== keyToRemove);
+      this.registry.set('customVideos', customVideos);
+      if (this.registry.get('selectedVideoKey') === keyToRemove) {
+          this.registry.set('selectedVideoKey', null);
+      }
+      // deleteBlob resolves a boolean (never rejects) — check it, don't .catch it.
+      MediaLibrary.deleteBlob('video:' + keyToRemove).then(ok => {
+          if (!ok) console.warn('video blob delete failed:', keyToRemove);
+      });
+      const thumbKey = 'vthumb-' + keyToRemove;
+      if (this.textures.exists(thumbKey)) this.textures.remove(thumbKey);
+      this.refreshGallery();
+      this.showFeedback("VIDEO REMOVED");
+  }
+  
+  /**
+   * Block 3: grab one frame from a stored video blob as a preview texture
+   * ('vthumb-<key>'), via a temporary <video> + canvas (no VideoActor needed —
+   * we want a single frame, not a live texture). Refreshes the gallery when done.
+   */
+  async _ensureVideoThumb(videoKey) {
+      const thumbKey = 'vthumb-' + videoKey;
+      if (this.textures.exists(thumbKey)) return;
+      if (!this._thumbsInFlight) this._thumbsInFlight = new Set();
+      if (this._thumbsInFlight.has(videoKey)) return;
+      this._thumbsInFlight.add(videoKey);
+      
+      let url = null;
+      const video = document.createElement('video');
+      const cleanup = () => {
+          video.remove();
+          if (url) URL.revokeObjectURL(url);
+          this._thumbsInFlight.delete(videoKey);
+      };
+      try {
+          const blob = await MediaLibrary.getBlob('video:' + videoKey);
+          if (!blob) { cleanup(); return; }
+          url = URL.createObjectURL(blob);
+          video.muted = true;
+          video.playsInline = true;
+          video.style.display = 'none';
+          video.src = url;
+          document.body.appendChild(video);
+          
+          await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('thumb timeout')), 8000);
+              video.onloadeddata = () => { clearTimeout(timeout); resolve(); };
+              video.onerror = () => { clearTimeout(timeout); reject(new Error('video error')); };
+          });
+          // Seek a moment in so the frame isn't a black lead-in
+          video.currentTime = Math.min(0.5, (video.duration || 1) / 2);
+          await new Promise(resolve => {
+              const timeout = setTimeout(resolve, 2000);
+              video.onseeked = () => { clearTimeout(timeout); resolve(); };
+          });
+          
+          const scale = Math.min(1, 160 / Math.max(video.videoWidth, video.videoHeight));
+          const w = Math.max(2, Math.round(video.videoWidth * scale));
+          const h = Math.max(2, Math.round(video.videoHeight * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+          cleanup();
+          
+          if (this.textures.exists(thumbKey)) this.textures.remove(thumbKey);
+          this.textures.addBase64(thumbKey, canvas.toDataURL('image/jpeg', 0.7));
+          // addBase64 is async — refresh the gallery once the texture lands
+          this.textures.once('addtexture-' + thumbKey, () => {
+              if (this.scene.isActive()) this.refreshGalleryDebounced(100);
+          });
+      } catch (e) {
+          console.warn(`video thumb failed for ${videoKey}:`, e.message || e);
+          cleanup();
+      }
+  }
+  
   async restoreCustomAssets() {
       console.log('=== ImageUploadScene: Restoring Custom Assets ===');
       
@@ -2645,11 +2807,31 @@ export default class ImageUploadScene extends Phaser.Scene {
           this.emptyText = null;
       }
       
-      const customDancers = this.registry.get('customDancers') || [];
-      const customTracks = this.registry.get('customTracks') || [];
+      let customDancers = this.registry.get('customDancers') || [];
+      let customTracks = this.registry.get('customTracks') || [];
+      let customVideos = this.registry.get('customVideos') || [];
       const { width, height } = this.scale;
       
-      if (customDancers.length === 0 && customTracks.length === 0) {
+      // Block 5: live search filter (dancers by key/filename, tracks by
+      // title/artist weighted, videos by name). Empty query = full lists.
+      const q = (this.searchQuery || '').trim();
+      if (q) {
+          customDancers = search(customDancers.map(key => ({ key })), q, [{ name: 'key', weight: 1 }]).map(o => o.key);
+          customTracks = search(customTracks, q, [{ name: 'title', weight: 2 }, { name: 'artist', weight: 1 }]);
+          customVideos = search(customVideos, q, [{ name: 'name', weight: 1 }]);
+      }
+      
+      if (q && customDancers.length === 0 && customTracks.length === 0 && customVideos.length === 0) {
+          this.emptyText = this.add.text(width/2, this.galleryViewportY + this.galleryViewportHeight/2, `No matches for "${q}"`, {
+              fontSize: '24px',
+              fontFamily: 'Arial',
+              color: '#ffff00',
+              align: 'center'
+          }).setOrigin(0.5);
+          return;
+      }
+      
+      if (customDancers.length === 0 && customTracks.length === 0 && customVideos.length === 0) {
           // Add to scene directly (not masked container)
           this.emptyText = this.add.text(width/2, this.galleryViewportY + this.galleryViewportHeight/2, "No Custom Files Uploaded Yet\nFeel Free to Batch Drag and Drop", {
               fontSize: '28px',
@@ -2964,10 +3146,110 @@ export default class ImageUploadScene extends Phaser.Scene {
           }
       }
       
+      // --- RIGHT COLUMN (below tracks): VIDEO GALLERY (Block 3) ---
+      // Videos upload in Settings (kept there — the flow works on iOS); this
+      // gallery lists them with preview/delete/select. GameScene prefers
+      // registry selectedVideoKey over "latest upload".
+      let videoSectionHeight = 0;
+      if (customVideos.length > 0) {
+          const videosStartY = startY + 60 + (customTracks.length * 60) + 30;
+          const vGap = 78;
+          const selectedKey = this.registry.get('selectedVideoKey') || null;
+          
+          const header = this.add.text(rightColumnX + 150, videosStartY - 8, '— VIDEOS —', {
+              fontSize: '20px',
+              fontFamily: 'Impact, Arial',
+              color: '#00ff99',
+              stroke: '#000000',
+              strokeThickness: 3
+          }).setOrigin(0.5);
+          this.musicGalleryContainer.add(header);
+          
+          customVideos.forEach((vid, index) => {
+              const vidY = videosStartY + 30 + (index * vGap) + vGap / 2 - 10;
+              const isSelected = selectedKey === vid.key;
+              
+              const itemContainer = this.add.container(rightColumnX + 150, vidY);
+              
+              const vidGlow = this.add.rectangle(0, 0, 380, 68, 0x00ff99, 0.1);
+              vidGlow.isGlow = true;
+              const vidBg = this.add.rectangle(0, 0, 380, 68, 0x000000, 0.7);
+              vidBg.setStrokeStyle(isSelected ? 4 : 2, isSelected ? 0x00ff99 : 0x0099ff, 0.9);
+              const vidHitArea = this.add.rectangle(0, 0, 380, 68, 0x000000, 0).setInteractive({ useHandCursor: true });
+              
+              itemContainer.add([vidGlow, vidBg]);
+              
+              // Thumbnail slot (frame grabbed async — see _ensureVideoThumb)
+              const thumbKey = 'vthumb-' + vid.key;
+              const thumbFrame = this.add.rectangle(-140, 0, 84, 54, 0x111133, 1).setStrokeStyle(1, 0x00ff99, 0.5);
+              itemContainer.add(thumbFrame);
+              if (this.textures.exists(thumbKey)) {
+                  const thumb = this.add.image(-140, 0, thumbKey);
+                  thumb.setScale(Math.min(80 / thumb.width, 50 / thumb.height));
+                  itemContainer.add(thumb);
+              } else {
+                  const placeholder = this.add.text(-140, 0, '▶', { fontSize: '24px', color: '#00ff99' }).setOrigin(0.5);
+                  itemContainer.add(placeholder);
+                  this._ensureVideoThumb(vid.key);
+              }
+              
+              const nameText = this.add.text(-88, -12, vid.name && vid.name.length > 22 ? vid.name.slice(0, 21) + '…' : (vid.name || vid.key), {
+                  fontSize: '16px',
+                  fontFamily: 'Arial',
+                  color: '#ffffff',
+                  fontStyle: 'bold'
+              }).setOrigin(0, 0.5);
+              const metaText = this.add.text(-88, 10, `${vid.duration || '?'}s · ${vid.w || '?'}×${vid.h || '?'}`, {
+                  fontSize: '13px',
+                  fontFamily: 'Arial',
+                  color: '#cccccc'
+              }).setOrigin(0, 0.5);
+              
+              // SELECT button — writes registry selectedVideoKey
+              const selectBtn = this.add.text(108, 0, isSelected ? '✓ IN USE' : 'SELECT', {
+                  fontSize: '15px',
+                  fontFamily: 'Impact, Arial',
+                  color: isSelected ? '#000000' : '#00ff99',
+                  backgroundColor: isSelected ? '#00ff99' : 'rgba(0,0,0,0.8)',
+                  padding: { x: 8, y: 4 }
+              }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+              selectBtn.on('pointerdown', (pointer) => {
+                  pointer.event.stopPropagation();
+                  this.sound.play('menu-click', { volume: 0.5 });
+                  this.registry.set('selectedVideoKey', isSelected ? null : vid.key);
+                  this.refreshGalleryDebounced(50);
+              });
+              
+              const deleteBtn = this.add.text(168, 0, '×', {
+                  fontSize: '28px',
+                  fontFamily: 'Arial',
+                  color: '#ff0000',
+                  fontStyle: 'bold',
+                  backgroundColor: 'rgba(0,0,0,0.8)',
+                  padding: { x: 8, y: 2 }
+              }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+              deleteBtn.on('pointerdown', (pointer) => {
+                  pointer.event.stopPropagation();
+                  this.sound.play('menu-click', { volume: 0.5 });
+                  this.removeCustomVideo(vid.key);
+              });
+              
+              itemContainer.add([nameText, metaText, selectBtn, deleteBtn, vidHitArea]);
+              itemContainer.sendToBack(vidHitArea);
+              itemContainer.sendToBack(vidBg);
+              itemContainer.sendToBack(vidGlow);
+              setupItemHover(itemContainer, [vidHitArea, selectBtn, deleteBtn]);
+              this.musicGalleryContainer.add(itemContainer);
+          });
+          
+          videoSectionHeight = 30 + 30 + customVideos.length * vGap;
+      }
+      
       // Calculate content heights for independent scrolling
       const imageRows = Math.ceil(customDancers.length / 3);
       const imageContentHeight = customDancers.length > 0 ? (startY + 100 + imageRows * 110) : 0;
-      const trackContentHeight = customTracks.length > 0 ? (startY + 60 + customTracks.length * 60) : 0;
+      const trackContentHeight = (customTracks.length > 0 || customVideos.length > 0)
+          ? (startY + 60 + customTracks.length * 60 + videoSectionHeight) : 0;
       
       // Update max scroll for each gallery independently
       this.maxImageScrollY = Math.max(0, imageContentHeight - this.galleryViewportHeight);

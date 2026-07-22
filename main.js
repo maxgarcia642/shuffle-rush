@@ -7,6 +7,7 @@ import SettingsScene from './SettingsScene.js';
 import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
 import MediaLibrary, { base64ToBlob } from './MediaLibrary.js';
 import ThemeManager from './ThemeManager.js';
+import { installSfxRouting } from './Sfx.js';
 
 /**
  * SHUFFLE RUSH v2 boot.
@@ -144,6 +145,11 @@ const config = {
       }
       ThemeManager.init(game.registry);
       console.log('=== Registry ready (theme:', ThemeManager.currentId + ') ===');
+    },
+    postBoot: (game) => {
+      // Block 6: every scene's this.sound.play(key, {volume}) SFX call is
+      // scaled by the sfxVol setting (music uses sound.add — unaffected).
+      installSfxRouting(game);
     }
   }
 };

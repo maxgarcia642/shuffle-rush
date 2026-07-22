@@ -4,6 +4,7 @@ import BeatDetector, { findPeaks, computeTempoCandidates, fitOffset } from '../B
 import { validateFile, classifyFile, LIMITS } from '../MediaPipeline.js';
 import PowerupManager from '../Powerups.js';
 import { search } from '../SearchIndex.js';
+import { scaleSfxVolume } from '../Sfx.js';
 
 let pass = 0, fail = 0;
 function t(name, cond, detail = '') {
@@ -106,6 +107,13 @@ console.log('── SearchIndex ──');
   t('no match empty', search(items, 'zzzz', keys).length === 0);
   t('empty query returns all', search(items, '', keys).length === 3);
 }
+
+console.log('── Sfx.scaleSfxVolume (Block 6: sfxVol routing) ──');
+t('default sfxVol 0.5 keeps shipped mix', scaleSfxVolume(0.8, 0.5) === 0.8);
+t('sfxVol 0 mutes', scaleSfxVolume(0.8, 0) === 0);
+t('sfxVol 1 doubles shipped mix', scaleSfxVolume(0.25, 1) === 0.5);
+t('missing sfxVol treated as default', scaleSfxVolume(0.6, undefined) === 0.6);
+t('missing base volume treated as 1', Math.abs(scaleSfxVolume(undefined, 0.5) - 1) < 1e-9);
 
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

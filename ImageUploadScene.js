@@ -3,6 +3,7 @@
 import Phaser from 'phaser';
 import { parseGIF, decompressFrames } from 'https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm';
 import LZString from 'https://cdn.jsdelivr.net/npm/lz-string@1.5.0/+esm';
+import MediaLibrary from './MediaLibrary.js';
 
 export default class ImageUploadScene extends Phaser.Scene {
   constructor() {
@@ -2285,6 +2286,82 @@ export default class ImageUploadScene extends Phaser.Scene {
       this.showFeedback("TRACK REMOVED");
   }
   
+  /** Block 3: remove a video from the library (registry list + stored blob). */
+  removeCustomVideo(keyToRemove) {
+      console.log(`🗑️ Removing video: ${keyToRemove}`);
+      const customVideos = (this.registry.get('customVideos') || []).filter(v => v.key !== keyToRemove);
+      this.registry.set('customVideos', customVideos);
+      if (this.registry.get('selectedVideoKey') === keyToRemove) {
+          this.registry.set('selectedVideoKey', null);
+      }
+      MediaLibrary.deleteBlob('video:' + keyToRemove).catch(e => console.warn('video blob delete failed:', e));
+      const thumbKey = 'vthumb-' + keyToRemove;
+      if (this.textures.exists(thumbKey)) this.textures.remove(thumbKey);
+      this.refreshGallery();
+      this.showFeedback("VIDEO REMOVED");
+  }
+  
+  /**
+   * Block 3: grab one frame from a stored video blob as a preview texture
+   * ('vthumb-<key>'), via a temporary <video> + canvas (no VideoActor needed —
+   * we want a single frame, not a live texture). Refreshes the gallery when done.
+   */
+  async _ensureVideoThumb(videoKey) {
+      const thumbKey = 'vthumb-' + videoKey;
+      if (this.textures.exists(thumbKey)) return;
+      if (!this._thumbsInFlight) this._thumbsInFlight = new Set();
+      if (this._thumbsInFlight.has(videoKey)) return;
+      this._thumbsInFlight.add(videoKey);
+      
+      let url = null;
+      const video = document.createElement('video');
+      const cleanup = () => {
+          video.remove();
+          if (url) URL.revokeObjectURL(url);
+          this._thumbsInFlight.delete(videoKey);
+      };
+      try {
+          const blob = await MediaLibrary.getBlob('video:' + videoKey);
+          if (!blob) { cleanup(); return; }
+          url = URL.createObjectURL(blob);
+          video.muted = true;
+          video.playsInline = true;
+          video.style.display = 'none';
+          video.src = url;
+          document.body.appendChild(video);
+          
+          await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('thumb timeout')), 8000);
+              video.onloadeddata = () => { clearTimeout(timeout); resolve(); };
+              video.onerror = () => { clearTimeout(timeout); reject(new Error('video error')); };
+          });
+          // Seek a moment in so the frame isn't a black lead-in
+          video.currentTime = Math.min(0.5, (video.duration || 1) / 2);
+          await new Promise(resolve => {
+              const timeout = setTimeout(resolve, 2000);
+              video.onseeked = () => { clearTimeout(timeout); resolve(); };
+          });
+          
+          const scale = Math.min(1, 160 / Math.max(video.videoWidth, video.videoHeight));
+          const w = Math.max(2, Math.round(video.videoWidth * scale));
+          const h = Math.max(2, Math.round(video.videoHeight * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+          cleanup();
+          
+          if (this.textures.exists(thumbKey)) this.textures.remove(thumbKey);
+          this.textures.addBase64(thumbKey, canvas.toDataURL('image/jpeg', 0.7));
+          // addBase64 is async — refresh the gallery once the texture lands
+          this.textures.once('addtexture-' + thumbKey, () => {
+              if (this.scene.isActive()) this.refreshGalleryDebounced(100);
+          });
+      } catch (e) {
+          console.warn(`video thumb failed for ${videoKey}:`, e.message || e);
+          cleanup();
+      }
+  }
+  
   async restoreCustomAssets() {
       console.log('=== ImageUploadScene: Restoring Custom Assets ===');
       
@@ -2647,9 +2724,10 @@ export default class ImageUploadScene extends Phaser.Scene {
       
       const customDancers = this.registry.get('customDancers') || [];
       const customTracks = this.registry.get('customTracks') || [];
+      const customVideos = this.registry.get('customVideos') || [];
       const { width, height } = this.scale;
       
-      if (customDancers.length === 0 && customTracks.length === 0) {
+      if (customDancers.length === 0 && customTracks.length === 0 && customVideos.length === 0) {
           // Add to scene directly (not masked container)
           this.emptyText = this.add.text(width/2, this.galleryViewportY + this.galleryViewportHeight/2, "No Custom Files Uploaded Yet\nFeel Free to Batch Drag and Drop", {
               fontSize: '28px',
@@ -2964,10 +3042,110 @@ export default class ImageUploadScene extends Phaser.Scene {
           }
       }
       
+      // --- RIGHT COLUMN (below tracks): VIDEO GALLERY (Block 3) ---
+      // Videos upload in Settings (kept there — the flow works on iOS); this
+      // gallery lists them with preview/delete/select. GameScene prefers
+      // registry selectedVideoKey over "latest upload".
+      let videoSectionHeight = 0;
+      if (customVideos.length > 0) {
+          const videosStartY = startY + 60 + (customTracks.length * 60) + 30;
+          const vGap = 78;
+          const selectedKey = this.registry.get('selectedVideoKey') || null;
+          
+          const header = this.add.text(rightColumnX + 150, videosStartY - 8, '— VIDEOS —', {
+              fontSize: '20px',
+              fontFamily: 'Impact, Arial',
+              color: '#00ff99',
+              stroke: '#000000',
+              strokeThickness: 3
+          }).setOrigin(0.5);
+          this.musicGalleryContainer.add(header);
+          
+          customVideos.forEach((vid, index) => {
+              const vidY = videosStartY + 30 + (index * vGap) + vGap / 2 - 10;
+              const isSelected = selectedKey === vid.key;
+              
+              const itemContainer = this.add.container(rightColumnX + 150, vidY);
+              
+              const vidGlow = this.add.rectangle(0, 0, 380, 68, 0x00ff99, 0.1);
+              vidGlow.isGlow = true;
+              const vidBg = this.add.rectangle(0, 0, 380, 68, 0x000000, 0.7);
+              vidBg.setStrokeStyle(isSelected ? 4 : 2, isSelected ? 0x00ff99 : 0x0099ff, 0.9);
+              const vidHitArea = this.add.rectangle(0, 0, 380, 68, 0x000000, 0).setInteractive({ useHandCursor: true });
+              
+              itemContainer.add([vidGlow, vidBg]);
+              
+              // Thumbnail slot (frame grabbed async — see _ensureVideoThumb)
+              const thumbKey = 'vthumb-' + vid.key;
+              const thumbFrame = this.add.rectangle(-140, 0, 84, 54, 0x111133, 1).setStrokeStyle(1, 0x00ff99, 0.5);
+              itemContainer.add(thumbFrame);
+              if (this.textures.exists(thumbKey)) {
+                  const thumb = this.add.image(-140, 0, thumbKey);
+                  thumb.setScale(Math.min(80 / thumb.width, 50 / thumb.height));
+                  itemContainer.add(thumb);
+              } else {
+                  const placeholder = this.add.text(-140, 0, '▶', { fontSize: '24px', color: '#00ff99' }).setOrigin(0.5);
+                  itemContainer.add(placeholder);
+                  this._ensureVideoThumb(vid.key);
+              }
+              
+              const nameText = this.add.text(-88, -12, vid.name && vid.name.length > 22 ? vid.name.slice(0, 21) + '…' : (vid.name || vid.key), {
+                  fontSize: '16px',
+                  fontFamily: 'Arial',
+                  color: '#ffffff',
+                  fontStyle: 'bold'
+              }).setOrigin(0, 0.5);
+              const metaText = this.add.text(-88, 10, `${vid.duration || '?'}s · ${vid.w || '?'}×${vid.h || '?'}`, {
+                  fontSize: '13px',
+                  fontFamily: 'Arial',
+                  color: '#cccccc'
+              }).setOrigin(0, 0.5);
+              
+              // SELECT button — writes registry selectedVideoKey
+              const selectBtn = this.add.text(108, 0, isSelected ? '✓ IN USE' : 'SELECT', {
+                  fontSize: '15px',
+                  fontFamily: 'Impact, Arial',
+                  color: isSelected ? '#000000' : '#00ff99',
+                  backgroundColor: isSelected ? '#00ff99' : 'rgba(0,0,0,0.8)',
+                  padding: { x: 8, y: 4 }
+              }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+              selectBtn.on('pointerdown', (pointer) => {
+                  pointer.event.stopPropagation();
+                  this.sound.play('menu-click', { volume: 0.5 });
+                  this.registry.set('selectedVideoKey', isSelected ? null : vid.key);
+                  this.refreshGalleryDebounced(50);
+              });
+              
+              const deleteBtn = this.add.text(168, 0, '×', {
+                  fontSize: '28px',
+                  fontFamily: 'Arial',
+                  color: '#ff0000',
+                  fontStyle: 'bold',
+                  backgroundColor: 'rgba(0,0,0,0.8)',
+                  padding: { x: 8, y: 2 }
+              }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+              deleteBtn.on('pointerdown', (pointer) => {
+                  pointer.event.stopPropagation();
+                  this.sound.play('menu-click', { volume: 0.5 });
+                  this.removeCustomVideo(vid.key);
+              });
+              
+              itemContainer.add([nameText, metaText, selectBtn, deleteBtn, vidHitArea]);
+              itemContainer.sendToBack(vidHitArea);
+              itemContainer.sendToBack(vidBg);
+              itemContainer.sendToBack(vidGlow);
+              setupItemHover(itemContainer, [vidHitArea, selectBtn, deleteBtn]);
+              this.musicGalleryContainer.add(itemContainer);
+          });
+          
+          videoSectionHeight = 30 + 30 + customVideos.length * vGap;
+      }
+      
       // Calculate content heights for independent scrolling
       const imageRows = Math.ceil(customDancers.length / 3);
       const imageContentHeight = customDancers.length > 0 ? (startY + 100 + imageRows * 110) : 0;
-      const trackContentHeight = customTracks.length > 0 ? (startY + 60 + customTracks.length * 60) : 0;
+      const trackContentHeight = (customTracks.length > 0 || customVideos.length > 0)
+          ? (startY + 60 + customTracks.length * 60 + videoSectionHeight) : 0;
       
       // Update max scroll for each gallery independently
       this.maxImageScrollY = Math.max(0, imageContentHeight - this.galleryViewportHeight);

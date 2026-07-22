@@ -110,7 +110,8 @@ console.log(`✓ Hydrated: ${BOOT.customTracks.length} tracks, ${BOOT.customDanc
 
 const SETTINGS_DEFAULTS = {
     themeId: 'neonRush', juiceOn: true, particleDensity: 1, latencyOffsetMs: 0,
-    musicVol: 0.4, sfxVol: 0.5, videoBgEnabled: false, videoBgSound: false, videoOpponentEnabled: false
+    musicVol: 0.4, sfxVol: 0.5, videoBgEnabled: false, videoBgSound: false, videoOpponentEnabled: false,
+    selectedVideoKey: null // Block 3: Dancer Lab video gallery selection
 };
 
 const config = {

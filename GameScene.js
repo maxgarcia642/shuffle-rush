@@ -1160,7 +1160,10 @@ export default class GameScene extends Phaser.Scene {
   async _setupVideoLayers() {
     const vids = this.registry.get('customVideos') || [];
     if (!vids.length) return;
-    const latest = vids[vids.length - 1];
+    // Block 3: prefer the video the player SELECTED in the Dancer Lab gallery;
+    // fall back to the latest upload (the pre-gallery behavior).
+    const selectedKey = this.registry.get('selectedVideoKey');
+    const latest = vids.find(v => v.key === selectedKey) || vids[vids.length - 1];
     const { width, height } = this.scale;
     try {
       if (this.registry.get('videoBgEnabled')) {
